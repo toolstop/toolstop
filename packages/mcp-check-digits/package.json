@@ -4,14 +4,11 @@
   "description": "MCP server that validates check digits for IBAN, LEI, ISBN, GTIN/UPC, VIN, NPI, ISIN, ABA routing numbers and payment cards.",
   "type": "module",
   "bin": {
-    "mcp-check-digits": "./index.mjs"
+    "mcp-check-digits": "./dist/index.mjs"
   },
-  "main": "./lib.mjs",
+  "main": "./dist/lib.mjs",
   "files": [
-    "index.mjs",
-    "worker.mjs",
-    "tools.mjs",
-    "lib.mjs",
+    "dist",
     "README.md"
   ],
   "keywords": [
@@ -30,6 +27,13 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test test.mjs"
-  }
+    "test": "node --test test.mjs",
+    "prepack": "node ../../scripts/prepack.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jamesonhohbein/toolstop.git",
+    "directory": "packages/mcp-check-digits"
+  },
+  "homepage": "https://check-digits.toolstop.dev"
 }
