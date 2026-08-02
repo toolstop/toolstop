@@ -128,6 +128,34 @@ test("the renamed tools are reachable under their new names", async () => {
   assert.match(luhn.result.structuredContent.checkDigit, /^\d$/);
 });
 
+// identify() builds matches as { kind, ...r }, so any validator returning its own
+// `kind` silently overwrites the format key. validateGtin did, reporting "EAN-13"
+// where the declared enum allows only "gtin". That broke the outputSchema
+// contract and meant the returned kind could not be fed back to
+// validate_identifier, so the two tools did not compose.
+test("identify_format always reports a kind validate_identifier accepts", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler(server);
+  const validateKinds = new Set(
+    server.tools.find((t) => t.name === "validate_identifier").inputSchema.properties.kind.enum,
+  );
+
+  const { json } = await call(h, env, {
+    jsonrpc: "2.0", id: 1, method: "tools/call",
+    params: { name: "identify_format", arguments: { value: "4006381333931" } },  // valid EAN-13
+  });
+  const matches = json.result.structuredContent.matches;
+  assert.ok(matches.length > 0, "expected the EAN-13 to match something");
+  for (const m of matches) {
+    assert.ok(validateKinds.has(m.kind), `kind "${m.kind}" is not accepted by validate_identifier`);
+  }
+  assert.ok(matches.some((m) => m.kind === "gtin"), "expected the gtin format key, not its width");
+
+  // The width is still reported, just under a name that cannot collide.
+  const gtin = matches.find((m) => m.kind === "gtin");
+  assert.equal(gtin.width, "EAN-13");
+});
+
 test("bad arguments are rejected with a reason", async () => {
   const { env } = fakeEnv();
   const h = createFetchHandler(server);

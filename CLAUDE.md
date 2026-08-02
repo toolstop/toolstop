@@ -88,6 +88,21 @@ digits that is the whole ballgame: valid arithmetic is not a real account. Aim
 for three or four sentences covering what it does, when to use it, what it
 returns, and where it stops.
 
+**Routing between tools goes in the server's `instructions`, not in each
+description.** When two tools overlap, saying what each one does is not enough;
+something has to say how to choose. `instructions` is the field MCP provides for
+it, and it is paid once instead of once per tool. Where one tool's output feeds
+another's input, say so in both places and make sure the values actually match:
+`identify_format` used to return `EAN-13` where `validate_identifier` accepts
+only `gtin`, so the documented handoff did not work.
+
+**A shared property block is worth writing once and pointing at.** Spreading
+`CHECK_RESULT_PROPERTIES` into a nested array schema cost about 1.1k characters
+of every `tools/list` response to repeat what the model had already read one
+field earlier. Prose in the array's own `description` says the same thing for a
+quarter of the size. Schemas are the larger half of the payload, not
+descriptions: measure before trimming prose.
+
 All of the above is enforced by `packages/_shared/conventions.test.mjs`, which
 walks `packages/mcp-*/tools.mjs` off the filesystem the way `discover.mjs` does.
 A new server is covered the moment the directory exists, so adding one requires

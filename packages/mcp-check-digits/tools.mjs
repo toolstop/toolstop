@@ -9,10 +9,14 @@ import { VALIDATORS, identify, luhnCheckDigit } from "./lib.mjs";
 
 const KINDS = Object.keys(VALIDATORS);
 
-// Shared by both validating tools. Validators return `valid` plus whichever
-// format-specific fields apply, so only `valid` is required and the schema stays
-// open. Declaring fields that some validators never emit would make it a lie,
-// and a tool that advertises an outputSchema has to conform to it.
+// Validators return `valid` plus whichever format-specific fields apply, so only
+// `valid` is required and the schema stays open. Declaring fields that some
+// validators never emit would make it a lie, and a tool that advertises an
+// outputSchema has to conform to it.
+//
+// identify_format deliberately does not repeat this block. Its matches carry the
+// same fields, but spelling them out a second time cost ~1.1k characters of
+// every tools/list response to tell the model something it had already read.
 const CHECK_RESULT_PROPERTIES = {
   valid: {
     type: "boolean",
@@ -35,9 +39,10 @@ const CHECK_RESULT_PROPERTIES = {
     type: "string",
     description: "ISO country code parsed from the identifier. IBAN and ISIN only.",
   },
-  kind: {
+  width: {
     type: "string",
-    description: "The resolved width for GTIN input: EAN-8, UPC-A, EAN-13 or GTIN-14.",
+    enum: ["EAN-8", "UPC-A", "EAN-13", "GTIN-14"],
+    description: "The resolved width of a GTIN. GTIN input only.",
   },
   brand: {
     type: "string",
@@ -65,7 +70,14 @@ export default {
     "of reasoning about whether an identifier is well-formed: the arithmetic is " +
     "exact and guessing is not. Every tool here answers a question about " +
     "arithmetic only. None of them can tell you whether an identifier " +
-    "corresponds to something that exists in the world.",
+    "corresponds to something that exists in the world.\n\n" +
+    "Choosing between them: if you already know what the identifier is meant to " +
+    "be, call validate_identifier with that `kind`. If you do not know, call " +
+    "identify_format first and pass a returned `kind` back to " +
+    "validate_identifier. Do not guess a `kind`, because validate_identifier " +
+    "reports a correct identifier of one format as invalid when it is checked " +
+    "against another, and that reads like a bad identifier rather than a bad " +
+    "guess.",
 
   tools: [
     {
@@ -75,8 +87,10 @@ export default {
         "Verify the check digit of a structured identifier: IBAN, LEI, ISBN-10, " +
         "ISBN-13, GTIN/UPC/EAN, VIN, NPI, ISIN, ABA routing number, or payment " +
         "card. Returns whether the checksum passes and, when it fails, the " +
-        "specific reason. Use it whenever an identifier has been typed, copied or " +
-        "transcribed and a transposed digit would be costly. A passing checksum " +
+        "specific reason. Use it when you already know which format the " +
+        "identifier is meant to be; if you do not, call identify_format first " +
+        "rather than guessing a `kind`, since a valid identifier checked against " +
+        "the wrong format comes back invalid. A passing checksum " +
         "proves only that the digits are internally consistent: it does not mean " +
         "the account, card, book, vehicle or provider exists, is active, or " +
         "belongs to any particular person.",
@@ -144,16 +158,26 @@ export default {
           },
           matches: {
             type: "array",
-            description: "Every format whose check digit the input satisfies.",
+            description:
+              "Every format whose check digit the input satisfies, in registry " +
+              "order. Each entry carries `kind` plus the same format-specific " +
+              "fields validate_identifier returns for that format, such as " +
+              "`country` for an IBAN or `brand` for a card. Only satisfied " +
+              "formats are listed, so no entry carries `code` or `reason`.",
             items: {
               type: "object",
               properties: {
                 kind: {
                   type: "string",
                   enum: KINDS,
-                  description: "The identifier format that matched.",
+                  description:
+                    "The identifier format that matched. Pass this straight " +
+                    "back to validate_identifier as its `kind`.",
                 },
-                ...CHECK_RESULT_PROPERTIES,
+                valid: {
+                  type: "boolean",
+                  description: "Always true. Formats that failed are omitted, not listed as false.",
+                },
               },
               required: ["kind", "valid"],
             },

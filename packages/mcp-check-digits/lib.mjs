@@ -140,8 +140,13 @@ export function validateGtin(input) {
   // which weight the string starts on.
   const startWeight = s.length % 2 === 0 ? 3 : 1;
   const ok = gtinValid(s, startWeight);
-  const kind = { 8: "EAN-8", 12: "UPC-A", 13: "EAN-13", 14: "GTIN-14" }[s.length];
-  return { valid: ok, kind, normalized: s, ...(ok ? {} : { code: "checksum", reason: "GTIN checksum failed" }) };
+  // Named `width`, not `kind`. identify() builds each match as { kind, ...r },
+  // so a field called `kind` here would overwrite the format key and report
+  // "EAN-13" where every other format reports its VALIDATORS name. That value
+  // is not accepted by validate_identifier's `kind` enum, so the two tools
+  // would not compose.
+  const width = { 8: "EAN-8", 12: "UPC-A", 13: "EAN-13", 14: "GTIN-14" }[s.length];
+  return { valid: ok, width, normalized: s, ...(ok ? {} : { code: "checksum", reason: "GTIN checksum failed" }) };
 }
 
 // ------------------------------------------------------------------------- VIN
