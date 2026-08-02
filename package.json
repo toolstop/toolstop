@@ -1,0 +1,14 @@
+{
+  "name": "toolstop",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/mcp-*"
+  ],
+  "scripts": {
+    "test": "node --test packages/*/test.mjs packages/_shared/*.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.118.0"
+  }
+}

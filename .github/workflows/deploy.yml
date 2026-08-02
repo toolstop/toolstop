@@ -1,0 +1,64 @@
+name: Deploy
+
+# Deploys only the servers whose files changed. Cloudflare Workers scale to zero,
+# so an idle server costs nothing and there is no reason to tear one down.
+#
+# Required repository secrets:
+#   CLOUDFLARE_API_TOKEN   - scoped to Workers Scripts:Edit
+#   CLOUDFLARE_ACCOUNT_ID
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Deploy a single package (blank = all changed)'
+        required: false
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.find.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+      - id: find
+        run: node scripts/discover.mjs >> "$GITHUB_OUTPUT"
+        env:
+          ONLY_PACKAGE: ${{ inputs.package }}
+
+  deploy:
+    needs: discover
+    if: needs.discover.outputs.targets != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.discover.outputs.targets) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      # Never deploy a server whose own tests fail.
+      - name: Test
+        run: node --test packages/${{ matrix.package }}/test.mjs
+
+      - name: Deploy to Cloudflare Workers
+        working-directory: packages/${{ matrix.package }}
+        run: npx --yes wrangler@4 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # A green deploy that serves errors is worse than a failed one.
+      - name: Smoke test the live endpoint
+        run: node scripts/smoke.mjs ${{ matrix.package }}

@@ -1,0 +1,48 @@
+name: CI
+
+# Free on public repos. Every package is discovered automatically, so adding
+# server N+1 means creating a directory — no workflow edit.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.find.outputs.packages }}
+      changed: ${{ steps.find.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+      - id: find
+        run: node scripts/discover.mjs >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: discover
+    if: needs.discover.outputs.packages != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.discover.outputs.packages) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Test ${{ matrix.package }}
+        run: node --test packages/${{ matrix.package }}/test.mjs
+
+  shared:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      # Transport, validation and the telemetry privacy boundary.
+      - run: node --test packages/_shared/*.test.mjs
