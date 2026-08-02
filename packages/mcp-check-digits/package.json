@@ -1,7 +1,7 @@
 {
   "name": "mcp-check-digits",
   "version": "0.1.0",
-  "description": "MCP server that validates check digits for IBAN, LEI, ISBN, GTIN/UPC, VIN, NPI, ISIN, ABA routing numbers and payment cards.",
+  "description": "Catch mistyped bank accounts, payment cards, barcodes, VINs and other structured identifiers before a bad one causes a failed payment, a rejected claim or a corrupted record.",
   "type": "module",
   "bin": {
     "mcp-check-digits": "./dist/index.mjs"
@@ -16,11 +16,24 @@
     "modelcontextprotocol",
     "mcp-server",
     "check-digit",
+    "checksum",
     "validation",
+    "data-validation",
+    "typo-detection",
     "iban",
-    "vin",
+    "aba",
+    "routing-number",
+    "credit-card",
+    "luhn",
+    "gtin",
+    "upc",
+    "ean",
+    "barcode",
     "isbn",
-    "luhn"
+    "vin",
+    "npi",
+    "isin",
+    "lei"
   ],
   "license": "MIT",
   "engines": {
