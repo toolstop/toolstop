@@ -53,6 +53,16 @@ server logging raw input would be storing real IBANs and card numbers, which is
 a liability regardless of intent. `packages/_shared/transport.test.mjs` asserts
 no raw value reaches telemetry. That is the test least worth breaking silently.
 
+**A `classify` function forwards bounded codes, never free text.** This is the
+subtle version of the rule above and it was violated for a while: `classify`
+passed `result.reason` through, and validators build reasons like
+`GB IBANs are 22 characters, got 20`, so the country code of a real IBAN went
+into Analytics Engine. Prose that interpolates input is still input. Validators
+return a `code` from a closed set (`format`, `length`, `unknown_country`,
+`checksum`) and that is what gets recorded; `reason` stays in the response,
+where the caller is reading their own data. The bounded code is better
+telemetry anyway, since it groups in SQL and survives a reworded message.
+
 **Every tool declares `readOnlyHint` explicitly. The transport must never
 default it.** It used to. `annotations: { readOnlyHint: true, ...t.annotations }`
 meant the value was manufactured rather than declared, so the two checks that
@@ -77,6 +87,13 @@ this project is testing. `smoke.mjs` enforces this on the wire.
 digits that is the whole ballgame: valid arithmetic is not a real account. Aim
 for three or four sentences covering what it does, when to use it, what it
 returns, and where it stops.
+
+All of the above is enforced by `packages/_shared/conventions.test.mjs`, which
+walks `packages/mcp-*/tools.mjs` off the filesystem the way `discover.mjs` does.
+A new server is covered the moment the directory exists, so adding one requires
+no edit there either. Two of its checks are heuristics over description text and
+will occasionally be wrong; when one misfires, widen the pattern rather than
+working around it.
 
 **Servers are zero-dependency.** No MCP SDK, no zod. Stateless
 request/response MCP makes hand-rolled dispatch small enough that dropping both

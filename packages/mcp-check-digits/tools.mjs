@@ -18,9 +18,14 @@ const CHECK_RESULT_PROPERTIES = {
     type: "boolean",
     description: "Whether the check digit is arithmetically consistent.",
   },
+  code: {
+    type: "string",
+    enum: ["format", "length", "unknown_country", "checksum"],
+    description: "Bounded reason the check failed. Absent when valid.",
+  },
   reason: {
     type: "string",
-    description: "Why the check failed. Absent when valid.",
+    description: "Human-readable detail on the failure. Absent when valid.",
   },
   normalized: {
     type: "string",
@@ -99,7 +104,13 @@ export default {
       annotations: { readOnlyHint: true },
       handler: ({ value, kind }) => VALIDATORS[kind](value),
       // Derived facts only. The raw identifier never reaches telemetry.
-      classify: ({ kind }, result) => ({ kind, valid: result.valid, reason: result.reason ?? null }),
+      //
+      // `code` and not `reason`: the prose interpolates the input in places (an
+      // IBAN's country code, a VIN's expected check digit), so forwarding it
+      // would put substrings of a real identifier into Analytics Engine. The
+      // bounded code is also the better telemetry, since it groups in SQL and
+      // survives someone rewording a message.
+      classify: ({ kind }, result) => ({ kind, valid: result.valid, code: result.code ?? null }),
     },
 
     {

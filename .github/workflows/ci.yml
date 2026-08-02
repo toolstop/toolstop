@@ -1,7 +1,7 @@
 name: CI
 
 # Free on public repos. Every package is discovered automatically, so adding
-# server N+1 means creating a directory — no workflow edit.
+# server N+1 means creating a directory, no workflow edit.
 
 on:
   push:

@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 
 // Accepts either a full URL, or a package name whose hostname is read from its
-// wrangler.toml. The latter keeps the hostname declared in exactly one place —
+// wrangler.toml. The latter keeps the hostname declared in exactly one place,
 // CI never reconstructs it from parts.
 function resolveBase(arg) {
   if (!arg) return null;
@@ -14,7 +14,7 @@ function resolveBase(arg) {
   try {
     meta = JSON.parse(readFileSync(`packages/${arg}/server.json`, "utf8"));
   } catch {
-    console.error(`No packages/${arg}/server.json — pass a package name or a URL.`);
+    console.error(`No packages/${arg}/server.json. Pass a package name or a URL.`);
     process.exit(2);
   }
   if (!meta.hostname) {

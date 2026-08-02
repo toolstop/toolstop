@@ -3,7 +3,7 @@ main = "worker.mjs"
 compatibility_date = "2026-07-01"
 
 # The custom domain is attached once as infrastructure, not re-asserted on
-# every deploy — that would require zone-level permissions in CI for no gain.
+# every deploy, which would require zone-level permissions in CI for no gain.
 # The hostname lives in server.json.
 #
 # One canonical hostname: without this, wrangler re-enables the workers.dev URL
@@ -12,7 +12,7 @@ workers_dev = false
 preview_urls = false
 
 # Traffic recording. Analytics Engine is included on the free plan and there is
-# no database to run — see packages/_shared/telemetry.mjs.
+# no database to run. See packages/_shared/telemetry.mjs.
 [[analytics_engine_datasets]]
 binding = "MCP_EVENTS"
 dataset = "mcp_events"

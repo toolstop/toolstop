@@ -167,7 +167,7 @@ test("every request is recorded", async () => {
   assert.equal(rows.length, 3, "expected one row per request");
   const methods = rows.map((r) => r.blobs[2]);
   assert.deepEqual(methods, ["initialize", "tools/list", "tools/call"]);
-  // tools/list must record how many tools were exposed — the discovery signal.
+  // tools/list must record how many tools were exposed, the discovery signal.
   assert.equal(rows[1].doubles[2], 3);
 });
 
@@ -190,6 +190,32 @@ test("telemetry never contains the raw argument value", async () => {
   assert.equal(argShape.value, `str:${REAL_IBAN.length}`);
   assert.equal(classified.kind, "iban");
   assert.equal(classified.valid, true);
+});
+
+// The leak the greps above could not see. Validators build prose that
+// interpolates the input, so forwarding `reason` put a real IBAN's country code
+// into telemetry. Only the bounded `code` crosses that boundary now.
+test("a failure reason that embeds the input never reaches telemetry", async () => {
+  const { env, rows } = fakeEnv();
+  const h = createFetchHandler(server);
+  // GB IBANs are 22 characters. This one is 20, so the validator produces
+  // "GB IBANs are 22 characters, got 20", which carries the country code.
+  const SHORT_GB = "GB82WEST123456987654";
+  const { json } = await call(h, env, {
+    jsonrpc: "2.0", id: 1, method: "tools/call",
+    params: { name: "validate_identifier", arguments: { value: SHORT_GB, kind: "iban" } },
+  });
+
+  const classified = JSON.parse(rows[0].blobs[13]);
+  assert.equal(classified.code, "length", "the bounded code is what gets recorded");
+  assert.equal(classified.reason, undefined, "free-text reason must not be forwarded");
+
+  const dump = JSON.stringify(rows);
+  assert.ok(!dump.includes("IBANs are"), "reason prose leaked into telemetry");
+  assert.ok(!dump.includes("WEST"), "raw IBAN leaked into telemetry");
+
+  // The caller still gets the detail: it is their own data, and it is useful.
+  assert.match(json.result.structuredContent.reason, /GB IBANs are 22 characters/);
 });
 
 test("session id is stable within a request and non-identifying", async () => {

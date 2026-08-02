@@ -64,16 +64,17 @@ const IBAN_LENGTHS = {
 export function validateIban(input) {
   const s = clean(input);
   if (!/^[A-Z]{2}\d{2}[A-Z0-9]+$/.test(s)) {
-    return { valid: false, reason: "must start with 2 letters then 2 digits" };
+    return { valid: false, code: "format", reason: "must start with 2 letters then 2 digits" };
   }
   const country = s.slice(0, 2);
   const expected = IBAN_LENGTHS[country];
   if (expected === undefined) {
-    return { valid: false, reason: `unknown IBAN country code "${country}"` };
+    return { valid: false, code: "unknown_country", reason: `unknown IBAN country code "${country}"` };
   }
   if (s.length !== expected) {
     return {
       valid: false,
+      code: "length",
       reason: `${country} IBANs are ${expected} characters, got ${s.length}`,
     };
   }
@@ -84,7 +85,7 @@ export function validateIban(input) {
     country,
     length: s.length,
     normalized: s,
-    ...(ok ? {} : { reason: "mod-97 checksum failed" }),
+    ...(ok ? {} : { code: "checksum", reason: "mod-97 checksum failed" }),
   };
 }
 
@@ -93,24 +94,24 @@ export function validateIban(input) {
 export function validateLei(input) {
   const s = clean(input);
   if (!/^[A-Z0-9]{18}\d{2}$/.test(s)) {
-    return { valid: false, reason: "LEI is 20 alphanumerics ending in 2 digits" };
+    return { valid: false, code: "format", reason: "LEI is 20 alphanumerics ending in 2 digits" };
   }
   const ok = mod97(lettersToDigits(s)) === 1;
-  return { valid: ok, normalized: s, ...(ok ? {} : { reason: "mod-97 checksum failed" }) };
+  return { valid: ok, normalized: s, ...(ok ? {} : { code: "checksum", reason: "mod-97 checksum failed" }) };
 }
 
 // ------------------------------------------------------------------- ISBN / EAN
 
 export function validateIsbn10(input) {
   const s = clean(input);
-  if (!/^\d{9}[\dX]$/.test(s)) return { valid: false, reason: "ISBN-10 is 9 digits plus check (0-9 or X)" };
+  if (!/^\d{9}[\dX]$/.test(s)) return { valid: false, code: "format", reason: "ISBN-10 is 9 digits plus check (0-9 or X)" };
   let sum = 0;
   for (let i = 0; i < 10; i++) {
     const ch = s[i];
     sum += (10 - i) * (ch === "X" ? 10 : ch.charCodeAt(0) - 48);
   }
   const ok = sum % 11 === 0;
-  return { valid: ok, normalized: s, ...(ok ? {} : { reason: "mod-11 checksum failed" }) };
+  return { valid: ok, normalized: s, ...(ok ? {} : { code: "checksum", reason: "mod-11 checksum failed" }) };
 }
 
 function gtinValid(s, startWeight) {
@@ -124,23 +125,23 @@ function gtinValid(s, startWeight) {
 
 export function validateIsbn13(input) {
   const s = clean(input);
-  if (!/^\d{13}$/.test(s)) return { valid: false, reason: "ISBN-13 is 13 digits" };
-  if (!/^97[89]/.test(s)) return { valid: false, reason: "ISBN-13 must start 978 or 979" };
+  if (!/^\d{13}$/.test(s)) return { valid: false, code: "format", reason: "ISBN-13 is 13 digits" };
+  if (!/^97[89]/.test(s)) return { valid: false, code: "format", reason: "ISBN-13 must start 978 or 979" };
   const ok = gtinValid(s, 1);
-  return { valid: ok, normalized: s, ...(ok ? {} : { reason: "GTIN checksum failed" }) };
+  return { valid: ok, normalized: s, ...(ok ? {} : { code: "checksum", reason: "GTIN checksum failed" }) };
 }
 
 export function validateGtin(input) {
   const s = clean(input);
   if (!/^\d{8}$|^\d{12}$|^\d{13}$|^\d{14}$/.test(s)) {
-    return { valid: false, reason: "GTIN must be 8, 12, 13 or 14 digits" };
+    return { valid: false, code: "format", reason: "GTIN must be 8, 12, 13 or 14 digits" };
   }
   // For even-length GTINs the check digit sits in an even position, which flips
   // which weight the string starts on.
   const startWeight = s.length % 2 === 0 ? 3 : 1;
   const ok = gtinValid(s, startWeight);
   const kind = { 8: "EAN-8", 12: "UPC-A", 13: "EAN-13", 14: "GTIN-14" }[s.length];
-  return { valid: ok, kind, normalized: s, ...(ok ? {} : { reason: "GTIN checksum failed" }) };
+  return { valid: ok, kind, normalized: s, ...(ok ? {} : { code: "checksum", reason: "GTIN checksum failed" }) };
 }
 
 // ------------------------------------------------------------------------- VIN
@@ -155,7 +156,7 @@ const VIN_WEIGHTS = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
 export function validateVin(input) {
   const s = clean(input);
   if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(s)) {
-    return { valid: false, reason: "VIN is 17 chars, excluding I, O and Q" };
+    return { valid: false, code: "format", reason: "VIN is 17 chars, excluding I, O and Q" };
   }
   let sum = 0;
   for (let i = 0; i < 17; i++) {
@@ -171,7 +172,7 @@ export function validateVin(input) {
     normalized: s,
     expectedCheckDigit: expected,
     actualCheckDigit: s[8],
-    ...(ok ? {} : { reason: `check digit at position 9 should be ${expected}` }),
+    ...(ok ? {} : { code: "checksum", reason: `check digit at position 9 should be ${expected}` }),
   };
 }
 
@@ -179,10 +180,10 @@ export function validateVin(input) {
 
 export function validateNpi(input) {
   const s = clean(input);
-  if (!/^\d{10}$/.test(s)) return { valid: false, reason: "NPI is 10 digits" };
+  if (!/^\d{10}$/.test(s)) return { valid: false, code: "format", reason: "NPI is 10 digits" };
   // NPI prefixes the NPPES issuer id before the Luhn check.
   const ok = luhn("80840" + s);
-  return { valid: ok, normalized: s, ...(ok ? {} : { reason: "Luhn checksum failed" }) };
+  return { valid: ok, normalized: s, ...(ok ? {} : { code: "checksum", reason: "Luhn checksum failed" }) };
 }
 
 // ------------------------------------------------------------------------ ISIN
@@ -190,22 +191,22 @@ export function validateNpi(input) {
 export function validateIsin(input) {
   const s = clean(input);
   if (!/^[A-Z]{2}[A-Z0-9]{9}\d$/.test(s)) {
-    return { valid: false, reason: "ISIN is 2 letters, 9 alphanumerics, 1 check digit" };
+    return { valid: false, code: "format", reason: "ISIN is 2 letters, 9 alphanumerics, 1 check digit" };
   }
   const ok = luhn(lettersToDigits(s));
-  return { valid: ok, country: s.slice(0, 2), normalized: s, ...(ok ? {} : { reason: "Luhn checksum failed" }) };
+  return { valid: ok, country: s.slice(0, 2), normalized: s, ...(ok ? {} : { code: "checksum", reason: "Luhn checksum failed" }) };
 }
 
 // ---------------------------------------------------------------- ABA routing
 
 export function validateAba(input) {
   const s = clean(input);
-  if (!/^\d{9}$/.test(s)) return { valid: false, reason: "ABA routing number is 9 digits" };
+  if (!/^\d{9}$/.test(s)) return { valid: false, code: "format", reason: "ABA routing number is 9 digits" };
   const d = [...s].map((c) => c.charCodeAt(0) - 48);
   const sum =
     3 * (d[0] + d[3] + d[6]) + 7 * (d[1] + d[4] + d[7]) + 1 * (d[2] + d[5] + d[8]);
   const ok = sum % 10 === 0;
-  return { valid: ok, normalized: s, ...(ok ? {} : { reason: "ABA weighted checksum failed" }) };
+  return { valid: ok, normalized: s, ...(ok ? {} : { code: "checksum", reason: "ABA weighted checksum failed" }) };
 }
 
 // -------------------------------------------------------------- credit cards
@@ -222,14 +223,14 @@ const CARD_BRANDS = [
 
 export function validateCard(input) {
   const s = clean(input);
-  if (!/^\d{12,19}$/.test(s)) return { valid: false, reason: "card numbers are 12-19 digits" };
+  if (!/^\d{12,19}$/.test(s)) return { valid: false, code: "format", reason: "card numbers are 12-19 digits" };
   const ok = luhn(s);
   const match = CARD_BRANDS.find((b) => b.re.test(s));
   return {
     valid: ok,
     brand: match?.brand ?? "unknown",
     length: s.length,
-    ...(ok ? {} : { reason: "Luhn checksum failed" }),
+    ...(ok ? {} : { code: "checksum", reason: "Luhn checksum failed" }),
   };
 }
 
