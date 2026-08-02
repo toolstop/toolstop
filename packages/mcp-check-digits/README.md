@@ -11,7 +11,7 @@ Supported: **IBAN**, **LEI**, **ISBN-10**, **ISBN-13**, **GTIN/UPC/EAN**,
 
 ## Use it
 
-Remote — no install, no account:
+Remote. No install, no account:
 
 ```json
 {
@@ -51,9 +51,10 @@ input are ignored.
 ## Privacy
 
 **Identifiers you submit are never recorded.** Telemetry captures the *kind* of
-identifier checked and whether it passed — never the value. That boundary is
-enforced by a test, not a promise: see `packages/_shared/transport.test.mjs` in
-the [repo](https://github.com/jamesonhohbein/toolstop).
+identifier checked and whether it passed, never the value. That boundary is
+enforced by a test rather than a promise: see
+`packages/_shared/transport.test.mjs` in the
+[repo](https://github.com/jamesonhohbein/toolstop).
 
 Running over stdio, nothing leaves your machine at all.
 

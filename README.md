@@ -14,7 +14,7 @@ state, and can also run locally over stdio.
 
 ## Connecting
 
-Remote, over streamable HTTP — no install, no account:
+Remote, over streamable HTTP. No install, no account:
 
 ```json
 {
@@ -41,7 +41,7 @@ costs nothing.
 
 **Zero runtime dependencies.** No MCP SDK, no schema library. MCP over
 streamable HTTP is request/response, which makes hand-rolled dispatch small
-enough to be worth it — faster cold starts and no supply chain.
+enough to be worth it: faster cold starts, and no supply chain.
 
 **Telemetry records shape and outcome, never argument values.** A check-digit
 server that logged its input would be storing real IBANs and card numbers. The
@@ -55,7 +55,7 @@ can tell what a call will do before making it.
 ## Repo layout
 
 ```
-packages/_shared/     transport, dispatch, telemetry — shared by every server
+packages/_shared/     shared transport, dispatch and telemetry
 packages/mcp-<name>/  one server
 scripts/discover.mjs  derives the CI matrix from the filesystem
 scripts/smoke.mjs     protocol check against a live endpoint
