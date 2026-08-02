@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createFetchHandler } from "./http.mjs";
+import { createFetchHandler, assertServerShape } from "./http.mjs";
 import server from "../mcp-check-digits/tools.mjs";
 
 // Stand-in for the Analytics Engine binding.
@@ -35,9 +35,57 @@ test("tools/list exposes annotated tools", async () => {
   const { json } = await call(h, env, { jsonrpc: "2.0", id: 2, method: "tools/list" });
   assert.equal(json.result.tools.length, 3);
   for (const t of json.result.tools) {
-    assert.equal(t.annotations.readOnlyHint, true, `${t.name} missing readOnlyHint`);
+    // Asserting the hint is *declared*, not that it is true. Requiring `true`
+    // would reject a correctly-annotated write tool, and would pass trivially
+    // for a tool that declared nothing at all.
+    assert.equal(
+      typeof t.annotations.readOnlyHint,
+      "boolean",
+      `${t.name} does not declare readOnlyHint`,
+    );
     assert.equal(t.inputSchema.type, "object");
+    assert.equal(t.outputSchema.type, "object", `${t.name} does not declare an outputSchema`);
   }
+});
+
+// The regression that motivated assertServerShape: the transport used to default
+// readOnlyHint to true, so a mutating tool that forgot the hint was advertised as
+// safe to run unattended and every check downstream agreed with it.
+test("a tool that omits readOnlyHint is rejected at construction", () => {
+  const bad = {
+    name: "bad", version: "0",
+    tools: [{ name: "t", inputSchema: { type: "object", properties: {} }, handler: () => ({}) }],
+  };
+  assert.throws(() => createFetchHandler(bad), /readOnlyHint must be declared explicitly/);
+});
+
+test("a write tool is accepted, and must also declare destructiveHint", () => {
+  const writeServer = (annotations) => ({
+    name: "w", version: "0",
+    tools: [{
+      name: "t", inputSchema: { type: "object", properties: {} },
+      annotations, handler: () => ({}),
+    }],
+  });
+
+  assert.throws(
+    () => assertServerShape(writeServer({ readOnlyHint: false })),
+    /must also declare annotations.destructiveHint/,
+  );
+  assert.doesNotThrow(
+    () => assertServerShape(writeServer({ readOnlyHint: false, destructiveHint: false })),
+  );
+});
+
+test("duplicate tool names are rejected at construction", () => {
+  const dupe = {
+    name: "d", version: "0",
+    tools: ["t", "t"].map((name) => ({
+      name, inputSchema: { type: "object", properties: {} },
+      annotations: { readOnlyHint: true }, handler: () => ({}),
+    })),
+  };
+  assert.throws(() => assertServerShape(dupe), /duplicate tool name/);
 });
 
 test("tools/call validates a real IBAN", async () => {
@@ -48,6 +96,36 @@ test("tools/call validates a real IBAN", async () => {
     params: { name: "validate_identifier", arguments: { value: REAL_IBAN, kind: "iban" } },
   });
   assert.equal(JSON.parse(json.result.content[0].text).valid, true);
+});
+
+test("a tool with an outputSchema also returns structuredContent", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler(server);
+  const { json } = await call(h, env, {
+    jsonrpc: "2.0", id: 3, method: "tools/call",
+    params: { name: "validate_identifier", arguments: { value: REAL_IBAN, kind: "iban" } },
+  });
+  assert.equal(json.result.structuredContent.valid, true);
+  assert.equal(json.result.structuredContent.country, "GB");
+  // The serialized copy stays in the text block for clients that ignore it.
+  assert.deepEqual(JSON.parse(json.result.content[0].text), json.result.structuredContent);
+});
+
+test("the renamed tools are reachable under their new names", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler(server);
+  const { json: id } = await call(h, env, {
+    jsonrpc: "2.0", id: 1, method: "tools/call",
+    params: { name: "identify_format", arguments: { value: REAL_IBAN } },
+  });
+  assert.equal(id.result.structuredContent.matched, true);
+  assert.ok(id.result.structuredContent.matches.some((m) => m.kind === "iban"));
+
+  const { json: luhn } = await call(h, env, {
+    jsonrpc: "2.0", id: 2, method: "tools/call",
+    params: { name: "compute_luhn_digit", arguments: { partial: "455673500000000" } },
+  });
+  assert.match(luhn.result.structuredContent.checkDigit, /^\d$/);
 });
 
 test("bad arguments are rejected with a reason", async () => {

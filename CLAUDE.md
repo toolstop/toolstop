@@ -53,9 +53,30 @@ server logging raw input would be storing real IBANs and card numbers, which is
 a liability regardless of intent. `packages/_shared/transport.test.mjs` asserts
 no raw value reaches telemetry. That is the test least worth breaking silently.
 
-**Tools carry `readOnlyHint` and a full `inputSchema` from the start.** The
-post-deploy smoke test checks for them, so a server missing annotations fails
-before it reaches a user.
+**Every tool declares `readOnlyHint` explicitly. The transport must never
+default it.** It used to. `annotations: { readOnlyHint: true, ...t.annotations }`
+meant the value was manufactured rather than declared, so the two checks that
+"verified" it were reading back a constant and could not fail. The consequence
+was not untidiness: the first write tool that forgot the hint would have been
+advertised to every client as safe to auto-approve without asking a human.
+
+`assertServerShape` in `_shared/http.mjs` now requires it, and runs once when a
+transport is constructed, so a malformed server fails at deploy rather than at
+request time. Both transports call it, since `runStdio` bypasses
+`createFetchHandler` and would otherwise be ungated. `openWorldHint` still
+defaults to `false`, which is honest: no server here has an upstream.
+
+**Tool names are lower `snake_case`, verb first, and at most 21 characters.**
+The limit is not arbitrary. Clients namespace as `mcp__<server>__<tool>` against
+a hard 64-character cap in the Anthropic API, and an OAuth-connector prefix is
+`mcp__` plus a 36-character UUID plus `__`, which is 43. A longer name works
+locally and breaks on a directory install, which is the only distribution path
+this project is testing. `smoke.mjs` enforces this on the wire.
+
+**Tool descriptions state what a passing result does not mean.** For check
+digits that is the whole ballgame: valid arithmetic is not a real account. Aim
+for three or four sentences covering what it does, when to use it, what it
+returns, and where it stops.
 
 **Servers are zero-dependency.** No MCP SDK, no zod. Stateless
 request/response MCP makes hand-rolled dispatch small enough that dropping both
