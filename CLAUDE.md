@@ -61,6 +61,27 @@ before it reaches a user.
 request/response MCP makes hand-rolled dispatch small enough that dropping both
 is worth it: faster cold starts, and no supply chain.
 
+## Publishing to npm
+
+`bin` and `main` point into `dist/`, which does not exist in the repo. The
+`prepack` hook builds it: `scripts/prepack.mjs` copies the server's own files
+plus the three `_shared` transport files into `dist/` and rewrites the
+`../_shared/` import prefix, because that path resolves in the repo but points
+outside the package root, so npm would otherwise ship a tarball with no
+transport in it.
+
+```bash
+cd packages/mcp-<name> && npm publish   # prepack runs automatically
+npm pack                                # same build, inspect before publishing
+```
+
+Consequence in the repo: the workspace `node_modules/.bin/mcp-<name>` symlink
+dangles until something has run prepack. To exercise a server over stdio during
+development, run `node packages/mcp-<name>/index.mjs` directly.
+
+Output is plain readable ESM, not a bundle. Someone deciding whether to trust a
+server should be able to read exactly what they installed.
+
 ## Architecture
 
 `packages/_shared/` holds everything reusable:
