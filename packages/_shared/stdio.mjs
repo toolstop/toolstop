@@ -1,7 +1,7 @@
 // stdio transport, sharing the same dispatch as the Worker.
 //
 // Kept for local use and Claude Desktop, but note: stdio traffic is invisible to
-// us by design — it runs on the user's machine and we deliberately do not phone
+// us by design: it runs on the user's machine and we deliberately do not phone
 // home. Remote HTTP is the observable path and the one the directories accept.
 
 import { dispatch } from "./http.mjs";

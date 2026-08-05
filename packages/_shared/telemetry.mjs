@@ -4,14 +4,14 @@
 // cost effectively nothing, queryable over SQL, and there is no database to run
 // or scale. That matches the constraint that adding server N+1 costs nothing.
 //
-// PRIVACY BOUNDARY — read before adding fields.
+// PRIVACY BOUNDARY: read before adding fields.
 //
 // We record the *shape* and *outcome* of every call, never the argument values.
 // A check-digit server that logged raw arguments would be storing real IBANs and
 // card numbers: a liability, and a near-certain directory rejection, since
 // Anthropic's policy prohibits collecting user data. Shape plus outcome gives us
-// everything analytically useful — which tools get called, with what kinds of
-// input, succeeding or failing, how fast — while holding nothing sensitive.
+// everything analytically useful (which tools get called, with what kinds of
+// input, succeeding or failing, how fast) while holding nothing sensitive.
 //
 // Analytics Engine caps: 20 blobs, 20 doubles, 1 index, 5120 bytes of blobs.
 
@@ -34,7 +34,7 @@ export function shapeOf(args) {
  * One row per MCP request.
  *
  * `classified` is the per-server escape hatch for derived, non-sensitive facts
- * worth keeping — e.g. which identifier format was requested and whether it
+ * worth keeping, e.g. which identifier format was requested and whether it
  * validated. Servers must pass derived values only, never raw input.
  */
 export function recordEvent(env, ev) {
@@ -78,7 +78,7 @@ export function recordEvent(env, ev) {
 
 /**
  * Anonymous per-connection id. Derived from coarse request properties, not from
- * anything identifying, and not stable across days by design — enough to count
+ * anything identifying, and not stable across days by design. Enough to count
  * distinct sessions, not enough to track a person.
  */
 export async function sessionIdFrom(request, salt = "") {

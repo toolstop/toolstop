@@ -1,5 +1,5 @@
-// The single source of truth for this server. Both transports — Worker HTTP and
-// stdio — import this and nothing else. Adding a new spray server means writing
+// The single source of truth for this server. Both transports (Worker HTTP and
+// stdio) import this and nothing else. Adding a new spray server means writing
 // one file in this shape.
 
 import { VALIDATORS, identify, luhnCheckDigit } from "./lib.mjs";
@@ -11,7 +11,7 @@ export default {
   version: "0.1.0",
   instructions:
     "Validates check digits for structured identifiers. Call these tools instead " +
-    "of reasoning about whether an identifier is well-formed — the arithmetic is " +
+    "of reasoning about whether an identifier is well-formed: the arithmetic is " +
     "exact and guessing is not.",
 
   tools: [
