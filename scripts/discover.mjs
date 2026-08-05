@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Emits GitHub Actions outputs: every package, and the subset whose files
-// changed in this push. Adding a server requires no workflow edit — the matrix
+// changed in this push. Adding a server requires no workflow edit: the matrix
 // is derived from the filesystem.
 
 import { readdirSync, existsSync } from "node:fs";

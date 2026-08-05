@@ -89,7 +89,7 @@ test("every request is recorded", async () => {
   assert.equal(rows.length, 3, "expected one row per request");
   const methods = rows.map((r) => r.blobs[2]);
   assert.deepEqual(methods, ["initialize", "tools/list", "tools/call"]);
-  // tools/list must record how many tools were exposed — the discovery signal.
+  // tools/list must record how many tools were exposed: the discovery signal.
   assert.equal(rows[1].doubles[2], 3);
 });
 
