@@ -114,7 +114,42 @@ working around it.
 request/response MCP makes hand-rolled dispatch small enough that dropping both
 is worth it: faster cold starts, and no supply chain.
 
-## Publishing to npm
+## Releasing
+
+**Bump the version in `package.json`, `server.json` and `tools.mjs`, and push.**
+That is the whole release process. CI publishes to npm and to the MCP registry
+when it sees a version npm does not have, and does nothing when it does not, so
+an ordinary code push is silent and there is no tag, changelog or release ritual
+to remember.
+
+Publishing runs after the smoke test, never in parallel with it. The registry
+listing advertises the remote URL, so a listing published ahead of a working
+endpoint points strangers at a broken server.
+
+The three version strings must agree. `conventions.test.mjs` asserts it, along
+with everything else the registry rejects on: the 100-character description cap,
+the `<namespace>/<name>` pattern, and `mcpName` matching `server.json`'s `name`.
+Those live in a test rather than being discovered at publish time, because a
+registry rejection three jobs downstream is illegible.
+
+**Namespace is `dev.toolstop/<server>`, authenticated by a DNS TXT record on the
+apex of `toolstop.dev`.** The alternative, `mcp-publisher login github-oidc`,
+needs no stored secret at all, and it is the option the upstream docs recommend.
+It is not used here because OIDC can only assert `io.github.jamesonhohbein/*`,
+which puts a personal GitHub account in front of every listing. Spec §5 and §11
+name vendor trust as the highest structural risk, so the namespace is doing
+brand work and paying for it with a stored key is the right side of that trade.
+Reverse it by changing two strings and swapping the login step.
+
+The TXT record goes on the **apex**, not a `_mcp-auth` selector. MCP DNS auth is
+SPF-style placement, and a selector fails with a generic signature error that
+says nothing useful. Rotating keys means deleting the old record too: a stale
+one is tried first and fails verification.
+
+`key.pem` is the credential proving ownership of the namespace. It belongs in
+the `MCP_PRIVATE_KEY` secret and nowhere in the repo.
+
+## How the npm tarball is built
 
 `bin` and `main` point into `dist/`, which does not exist in the repo. The
 `prepack` hook builds it: `scripts/prepack.mjs` copies the server's own files
@@ -124,8 +159,7 @@ outside the package root, so npm would otherwise ship a tarball with no
 transport in it.
 
 ```bash
-cd packages/mcp-<name> && npm publish   # prepack runs automatically
-npm pack                                # same build, inspect before publishing
+npm pack   # from a package dir: same build CI ships, inspect before trusting it
 ```
 
 Consequence in the repo: the workspace `node_modules/.bin/mcp-<name>` symlink
@@ -163,7 +197,13 @@ CI needs exactly one Cloudflare permission: **Workers Scripts: Edit**. Not the
 "Edit Cloudflare Workers" template, which bundles KV, R2, Routes and Tail that
 nothing here uses. No client IP filtering, because GitHub runner IPs rotate.
 
-Required repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
+Required repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
+`NPM_TOKEN` (granular access token, write on `mcp-*`, **Bypass 2FA** enabled, or
+publishing 403s), `MCP_PRIVATE_KEY`.
+
+A granular npm token cannot be scoped to a package that does not exist yet, and
+these are unscoped names with no `@org` pattern to select. The first publish of
+a new server needs a token with **All packages** write access; narrow it after.
 
 **Secrets never go in `wrangler.toml`.** It is committed.
 
