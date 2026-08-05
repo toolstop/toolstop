@@ -1,5 +1,5 @@
-// The single source of truth for this server. Both transports, Worker HTTP and
-// stdio, import this and nothing else. Adding a new spray server means writing
+// The single source of truth for this server. Both transports (Worker HTTP and
+// stdio) import this and nothing else. Adding a new spray server means writing
 // one file in this shape.
 //
 // Every tool states `annotations.readOnlyHint` explicitly. The transport does

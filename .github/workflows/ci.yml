@@ -1,7 +1,7 @@
 name: CI
 
 # Free on public repos. Every package is discovered automatically, so adding
-# server N+1 means creating a directory, no workflow edit.
+# server N+1 means creating a directory, with no workflow edit.
 
 on:
   push:
@@ -46,3 +46,17 @@ jobs:
           node-version: '22'
       # Transport, validation and the telemetry privacy boundary.
       - run: node --test packages/_shared/*.test.mjs
+
+  prose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Em and en dashes read as machine-written. They are barred everywhere,
+      # but the ones that matter are in tool descriptions and instructions,
+      # which ship to every client. A doc-only sweep missed those once already.
+      - name: No em or en dashes
+        run: |
+          if git grep -nP '[\x{2013}\x{2014}]' -- . ':!package-lock.json'; then
+            echo "::error::em or en dash found; use a comma, colon, semicolon, parentheses, or two sentences"
+            exit 1
+          fi

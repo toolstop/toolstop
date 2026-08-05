@@ -34,7 +34,7 @@ export function shapeOf(args) {
  * One row per MCP request.
  *
  * `classified` is the per-server escape hatch for derived, non-sensitive facts
- * worth keeping: e.g. which identifier format was requested and whether it
+ * worth keeping, e.g. which identifier format was requested and whether it
  * validated. Servers must pass derived values only, never raw input.
  */
 export function recordEvent(env, ev) {
@@ -78,7 +78,7 @@ export function recordEvent(env, ev) {
 
 /**
  * Anonymous per-connection id. Derived from coarse request properties, not from
- * anything identifying, and not stable across days by design, enough to count
+ * anything identifying, and not stable across days by design. Enough to count
  * distinct sessions, not enough to track a person.
  */
 export async function sessionIdFrom(request, salt = "") {

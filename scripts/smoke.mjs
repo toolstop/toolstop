@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 
 // Accepts either a full URL, or a package name whose hostname is read from its
-// wrangler.toml. The latter keeps the hostname declared in exactly one place,
+// wrangler.toml. The latter keeps the hostname declared in exactly one place;
 // CI never reconstructs it from parts.
 function resolveBase(arg) {
   if (!arg) return null;
