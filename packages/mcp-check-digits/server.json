@@ -1,6 +1,6 @@
 {
   "name": "check-digits",
   "hostname": "check-digits.toolstop.dev",
-  "description": "Validate check digits for IBAN, LEI, ISBN, GTIN/UPC/EAN, VIN, NPI, ISIN, ABA routing numbers and payment cards.",
+  "description": "Catch mistyped bank accounts, payment cards, barcodes, VINs and other structured identifiers before a bad one causes a failed payment, a rejected claim or a corrupted record.",
   "transport": "streamable-http"
 }
