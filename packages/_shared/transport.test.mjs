@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createFetchHandler } from "./http.mjs";
+import { createFetchHandler, assertServerShape } from "./http.mjs";
 import server from "../mcp-check-digits/tools.mjs";
 
 // Stand-in for the Analytics Engine binding.
@@ -35,9 +35,57 @@ test("tools/list exposes annotated tools", async () => {
   const { json } = await call(h, env, { jsonrpc: "2.0", id: 2, method: "tools/list" });
   assert.equal(json.result.tools.length, 3);
   for (const t of json.result.tools) {
-    assert.equal(t.annotations.readOnlyHint, true, `${t.name} missing readOnlyHint`);
+    // Asserting the hint is *declared*, not that it is true. Requiring `true`
+    // would reject a correctly-annotated write tool, and would pass trivially
+    // for a tool that declared nothing at all.
+    assert.equal(
+      typeof t.annotations.readOnlyHint,
+      "boolean",
+      `${t.name} does not declare readOnlyHint`,
+    );
     assert.equal(t.inputSchema.type, "object");
+    assert.equal(t.outputSchema.type, "object", `${t.name} does not declare an outputSchema`);
   }
+});
+
+// The regression that motivated assertServerShape: the transport used to default
+// readOnlyHint to true, so a mutating tool that forgot the hint was advertised as
+// safe to run unattended and every check downstream agreed with it.
+test("a tool that omits readOnlyHint is rejected at construction", () => {
+  const bad = {
+    name: "bad", version: "0",
+    tools: [{ name: "t", inputSchema: { type: "object", properties: {} }, handler: () => ({}) }],
+  };
+  assert.throws(() => createFetchHandler(bad), /readOnlyHint must be declared explicitly/);
+});
+
+test("a write tool is accepted, and must also declare destructiveHint", () => {
+  const writeServer = (annotations) => ({
+    name: "w", version: "0",
+    tools: [{
+      name: "t", inputSchema: { type: "object", properties: {} },
+      annotations, handler: () => ({}),
+    }],
+  });
+
+  assert.throws(
+    () => assertServerShape(writeServer({ readOnlyHint: false })),
+    /must also declare annotations.destructiveHint/,
+  );
+  assert.doesNotThrow(
+    () => assertServerShape(writeServer({ readOnlyHint: false, destructiveHint: false })),
+  );
+});
+
+test("duplicate tool names are rejected at construction", () => {
+  const dupe = {
+    name: "d", version: "0",
+    tools: ["t", "t"].map((name) => ({
+      name, inputSchema: { type: "object", properties: {} },
+      annotations: { readOnlyHint: true }, handler: () => ({}),
+    })),
+  };
+  assert.throws(() => assertServerShape(dupe), /duplicate tool name/);
 });
 
 test("tools/call validates a real IBAN", async () => {
@@ -48,6 +96,64 @@ test("tools/call validates a real IBAN", async () => {
     params: { name: "validate_identifier", arguments: { value: REAL_IBAN, kind: "iban" } },
   });
   assert.equal(JSON.parse(json.result.content[0].text).valid, true);
+});
+
+test("a tool with an outputSchema also returns structuredContent", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler(server);
+  const { json } = await call(h, env, {
+    jsonrpc: "2.0", id: 3, method: "tools/call",
+    params: { name: "validate_identifier", arguments: { value: REAL_IBAN, kind: "iban" } },
+  });
+  assert.equal(json.result.structuredContent.valid, true);
+  assert.equal(json.result.structuredContent.country, "GB");
+  // The serialized copy stays in the text block for clients that ignore it.
+  assert.deepEqual(JSON.parse(json.result.content[0].text), json.result.structuredContent);
+});
+
+test("the renamed tools are reachable under their new names", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler(server);
+  const { json: id } = await call(h, env, {
+    jsonrpc: "2.0", id: 1, method: "tools/call",
+    params: { name: "identify_format", arguments: { value: REAL_IBAN } },
+  });
+  assert.equal(id.result.structuredContent.matched, true);
+  assert.ok(id.result.structuredContent.matches.some((m) => m.kind === "iban"));
+
+  const { json: luhn } = await call(h, env, {
+    jsonrpc: "2.0", id: 2, method: "tools/call",
+    params: { name: "compute_luhn_digit", arguments: { partial: "455673500000000" } },
+  });
+  assert.match(luhn.result.structuredContent.checkDigit, /^\d$/);
+});
+
+// identify() builds matches as { kind, ...r }, so any validator returning its own
+// `kind` silently overwrites the format key. validateGtin did, reporting "EAN-13"
+// where the declared enum allows only "gtin". That broke the outputSchema
+// contract and meant the returned kind could not be fed back to
+// validate_identifier, so the two tools did not compose.
+test("identify_format always reports a kind validate_identifier accepts", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler(server);
+  const validateKinds = new Set(
+    server.tools.find((t) => t.name === "validate_identifier").inputSchema.properties.kind.enum,
+  );
+
+  const { json } = await call(h, env, {
+    jsonrpc: "2.0", id: 1, method: "tools/call",
+    params: { name: "identify_format", arguments: { value: "4006381333931" } },  // valid EAN-13
+  });
+  const matches = json.result.structuredContent.matches;
+  assert.ok(matches.length > 0, "expected the EAN-13 to match something");
+  for (const m of matches) {
+    assert.ok(validateKinds.has(m.kind), `kind "${m.kind}" is not accepted by validate_identifier`);
+  }
+  assert.ok(matches.some((m) => m.kind === "gtin"), "expected the gtin format key, not its width");
+
+  // The width is still reported, just under a name that cannot collide.
+  const gtin = matches.find((m) => m.kind === "gtin");
+  assert.equal(gtin.width, "EAN-13");
 });
 
 test("bad arguments are rejected with a reason", async () => {
@@ -112,6 +218,32 @@ test("telemetry never contains the raw argument value", async () => {
   assert.equal(argShape.value, `str:${REAL_IBAN.length}`);
   assert.equal(classified.kind, "iban");
   assert.equal(classified.valid, true);
+});
+
+// The leak the greps above could not see. Validators build prose that
+// interpolates the input, so forwarding `reason` put a real IBAN's country code
+// into telemetry. Only the bounded `code` crosses that boundary now.
+test("a failure reason that embeds the input never reaches telemetry", async () => {
+  const { env, rows } = fakeEnv();
+  const h = createFetchHandler(server);
+  // GB IBANs are 22 characters. This one is 20, so the validator produces
+  // "GB IBANs are 22 characters, got 20", which carries the country code.
+  const SHORT_GB = "GB82WEST123456987654";
+  const { json } = await call(h, env, {
+    jsonrpc: "2.0", id: 1, method: "tools/call",
+    params: { name: "validate_identifier", arguments: { value: SHORT_GB, kind: "iban" } },
+  });
+
+  const classified = JSON.parse(rows[0].blobs[13]);
+  assert.equal(classified.code, "length", "the bounded code is what gets recorded");
+  assert.equal(classified.reason, undefined, "free-text reason must not be forwarded");
+
+  const dump = JSON.stringify(rows);
+  assert.ok(!dump.includes("IBANs are"), "reason prose leaked into telemetry");
+  assert.ok(!dump.includes("WEST"), "raw IBAN leaked into telemetry");
+
+  // The caller still gets the detail: it is their own data, and it is useful.
+  assert.match(json.result.structuredContent.reason, /GB IBANs are 22 characters/);
 });
 
 test("session id is stable within a request and non-identifying", async () => {

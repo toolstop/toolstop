@@ -49,8 +49,10 @@ transport emits one row per request describing *what kind* of call happened and
 whether it succeeded. `packages/_shared/transport.test.mjs` asserts that no raw
 argument value can reach it.
 
-**Every tool carries `readOnlyHint` and a complete `inputSchema`**, so a client
-can tell what a call will do before making it.
+**Every tool declares `readOnlyHint`, a complete `inputSchema` and an
+`outputSchema`**, so a client can tell what a call will do before making it and
+what shape comes back. The transport refuses to start a server whose tools do
+not state their annotations, rather than defaulting them to something reassuring.
 
 ## Repo layout
 

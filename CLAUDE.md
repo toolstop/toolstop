@@ -53,9 +53,62 @@ server logging raw input would be storing real IBANs and card numbers, which is
 a liability regardless of intent. `packages/_shared/transport.test.mjs` asserts
 no raw value reaches telemetry. That is the test least worth breaking silently.
 
-**Tools carry `readOnlyHint` and a full `inputSchema` from the start.** The
-post-deploy smoke test checks for them, so a server missing annotations fails
-before it reaches a user.
+**A `classify` function forwards bounded codes, never free text.** This is the
+subtle version of the rule above and it was violated for a while: `classify`
+passed `result.reason` through, and validators build reasons like
+`GB IBANs are 22 characters, got 20`, so the country code of a real IBAN went
+into Analytics Engine. Prose that interpolates input is still input. Validators
+return a `code` from a closed set (`format`, `length`, `unknown_country`,
+`checksum`) and that is what gets recorded; `reason` stays in the response,
+where the caller is reading their own data. The bounded code is better
+telemetry anyway, since it groups in SQL and survives a reworded message.
+
+**Every tool declares `readOnlyHint` explicitly. The transport must never
+default it.** It used to. `annotations: { readOnlyHint: true, ...t.annotations }`
+meant the value was manufactured rather than declared, so the two checks that
+"verified" it were reading back a constant and could not fail. The consequence
+was not untidiness: the first write tool that forgot the hint would have been
+advertised to every client as safe to auto-approve without asking a human.
+
+`assertServerShape` in `_shared/http.mjs` now requires it, and runs once when a
+transport is constructed, so a malformed server fails at deploy rather than at
+request time. Both transports call it, since `runStdio` bypasses
+`createFetchHandler` and would otherwise be ungated. `openWorldHint` still
+defaults to `false`, which is honest: no server here has an upstream.
+
+**Tool names are lower `snake_case`, verb first, and at most 21 characters.**
+The limit is not arbitrary. Clients namespace as `mcp__<server>__<tool>` against
+a hard 64-character cap in the Anthropic API, and an OAuth-connector prefix is
+`mcp__` plus a 36-character UUID plus `__`, which is 43. A longer name works
+locally and breaks on a directory install, which is the only distribution path
+this project is testing. `smoke.mjs` enforces this on the wire.
+
+**Tool descriptions state what a passing result does not mean.** For check
+digits that is the whole ballgame: valid arithmetic is not a real account. Aim
+for three or four sentences covering what it does, when to use it, what it
+returns, and where it stops.
+
+**Routing between tools goes in the server's `instructions`, not in each
+description.** When two tools overlap, saying what each one does is not enough;
+something has to say how to choose. `instructions` is the field MCP provides for
+it, and it is paid once instead of once per tool. Where one tool's output feeds
+another's input, say so in both places and make sure the values actually match:
+`identify_format` used to return `EAN-13` where `validate_identifier` accepts
+only `gtin`, so the documented handoff did not work.
+
+**A shared property block is worth writing once and pointing at.** Spreading
+`CHECK_RESULT_PROPERTIES` into a nested array schema cost about 1.1k characters
+of every `tools/list` response to repeat what the model had already read one
+field earlier. Prose in the array's own `description` says the same thing for a
+quarter of the size. Schemas are the larger half of the payload, not
+descriptions: measure before trimming prose.
+
+All of the above is enforced by `packages/_shared/conventions.test.mjs`, which
+walks `packages/mcp-*/tools.mjs` off the filesystem the way `discover.mjs` does.
+A new server is covered the moment the directory exists, so adding one requires
+no edit there either. Two of its checks are heuristics over description text and
+will occasionally be wrong; when one misfires, widen the pattern rather than
+working around it.
 
 **Servers are zero-dependency.** No MCP SDK, no zod. Stateless
 request/response MCP makes hand-rolled dispatch small enough that dropping both

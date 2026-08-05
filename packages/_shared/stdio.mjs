@@ -4,9 +4,12 @@
 // us by design: it runs on the user's machine and we deliberately do not phone
 // home. Remote HTTP is the observable path and the one the directories accept.
 
-import { dispatch } from "./http.mjs";
+import { dispatch, assertServerShape } from "./http.mjs";
 
 export async function runStdio(server) {
+  // stdio bypasses createFetchHandler, so it has to assert the same shape or a
+  // server would be gated on one transport and not the other.
+  assertServerShape(server);
   const meta = { transport: "stdio" };
   let buffer = "";
 

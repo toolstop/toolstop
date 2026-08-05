@@ -3,8 +3,7 @@ main = "worker.mjs"
 compatibility_date = "2026-07-01"
 
 # The custom domain is attached once as infrastructure, not re-asserted on
-# every deploy. Re-asserting it would require zone-level permissions in CI for
-# no gain.
+# every deploy, which would require zone-level permissions in CI for no gain.
 # The hostname lives in server.json.
 #
 # One canonical hostname: without this, wrangler re-enables the workers.dev URL

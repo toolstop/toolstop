@@ -42,11 +42,17 @@ Local, over stdio:
 | Tool | Does |
 |---|---|
 | `validate_identifier` | Verify one identifier against a named format. Returns whether the checksum passes and, when it fails, why. |
-| `identify_identifier` | Given a bare number, report every supported format whose check digit it satisfies. |
-| `luhn_check_digit` | Given digits without their check digit, return the digit that makes them Luhn-valid. |
+| `identify_format` | Given a bare number, report every supported format whose check digit it satisfies. |
+| `compute_luhn_digit` | Given digits without their check digit, return the digit that makes them Luhn-valid. |
 
-All three are read-only and carry complete input schemas. Spaces and dashes in
-input are ignored.
+All three are read-only and carry complete input and output schemas. Spaces and
+dashes in input are ignored.
+
+**What a pass means.** A check digit is arithmetic. A valid IBAN is not a real
+bank account, a valid card number is not a live card, and a valid ISBN is not a
+book that was ever printed. These tools tell you an identifier is internally
+consistent, which is what catches transposed digits and truncated copies. They
+cannot tell you the thing it names exists.
 
 ## Privacy
 

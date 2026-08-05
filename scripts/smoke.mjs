@@ -57,12 +57,30 @@ console.log(`ok    initialize: ${init.result.serverInfo.name}`);
 const list = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" });
 const tools = list?.result?.tools ?? [];
 if (tools.length === 0) fail("tools/list returned no tools");
+// This checks the wire, so it is the only gate that sees what a client actually
+// receives. It used to read back a value the transport had just defaulted, which
+// meant it could not fail; the transport no longer defaults readOnlyHint, so
+// these assertions are now load-bearing.
 for (const t of tools) {
-  if (!t.inputSchema || t.annotations?.readOnlyHint === undefined) {
-    fail(`tool ${t.name} is missing inputSchema or annotations; directory review will reject it`);
+  if (!t.inputSchema) fail(`tool ${t.name} has no inputSchema; directory review will reject it`);
+  if (typeof t.annotations?.readOnlyHint !== "boolean") {
+    fail(`tool ${t.name} does not declare readOnlyHint, so clients cannot tell if it is safe to auto-approve`);
+  }
+  if (t.annotations.readOnlyHint === false && typeof t.annotations.destructiveHint !== "boolean") {
+    fail(`tool ${t.name} is not read-only but does not declare destructiveHint`);
+  }
+  // Clients namespace as mcp__<server>__<tool> against a hard 64-char limit. An
+  // OAuth-connector prefix is `mcp__` + a 36-char UUID + `__` = 43, so a name
+  // over 21 characters can be unusable through a directory install even though
+  // it works fine locally.
+  if (t.name.length > 21) {
+    fail(`tool name ${t.name} is ${t.name.length} chars; over 21 breaks OAuth-connector installs`);
+  }
+  if (!/^[a-z][a-z0-9_]*$/.test(t.name)) {
+    fail(`tool name ${t.name} is not lower snake_case`);
   }
 }
-console.log(`ok    tools/list: ${tools.length} tools, all annotated`);
+console.log(`ok    tools/list: ${tools.length} tools, all annotated and within the name budget`);
 
 // Exercise the first tool with its own example, so this stays generic across servers.
 const first = tools[0];

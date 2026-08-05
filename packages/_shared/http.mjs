@@ -46,6 +46,38 @@ function validate(schema, args) {
   return errors;
 }
 
+// ----------------------------------------------------------- server definition
+
+// Checked once, when a transport is constructed, so a malformed server fails at
+// deploy instead of quietly serving a wrong answer for the life of the Worker.
+//
+// `readOnlyHint` has no safe default and so is not given one. A tool that
+// mutates something but omits the hint would otherwise be advertised as safe to
+// run unattended, and clients use exactly that hint to decide what to
+// auto-approve without asking a human. Absence is an error, not something to
+// paper over. `openWorldHint` does default, because "no upstream, no network,
+// pure computation" is a property of this architecture rather than of any one
+// tool.
+export function assertServerShape(server) {
+  const seen = new Set();
+  for (const t of server.tools ?? []) {
+    const where = `${server.name}/${t.name}`;
+    if (seen.has(t.name)) throw new Error(`${where}: duplicate tool name`);
+    seen.add(t.name);
+
+    if (typeof t.annotations?.readOnlyHint !== "boolean") {
+      throw new Error(`${where}: annotations.readOnlyHint must be declared explicitly, true or false`);
+    }
+    if (t.annotations.readOnlyHint === false && typeof t.annotations.destructiveHint !== "boolean") {
+      throw new Error(`${where}: a tool that is not read-only must also declare annotations.destructiveHint`);
+    }
+    if (t.inputSchema?.type !== "object") {
+      throw new Error(`${where}: inputSchema must be an object schema`);
+    }
+  }
+  return server;
+}
+
 // ------------------------------------------------------------------- dispatch
 
 export async function dispatch({ message, server, env, meta = {} }) {
@@ -93,7 +125,10 @@ export async function dispatch({ message, server, env, meta = {} }) {
           title: t.title,
           description: t.description,
           inputSchema: t.inputSchema,
-          annotations: { readOnlyHint: true, openWorldHint: false, ...t.annotations },
+          ...(t.outputSchema ? { outputSchema: t.outputSchema } : {}),
+          // readOnlyHint is deliberately not defaulted here; assertServerShape
+          // has already required the tool to state it.
+          annotations: { openWorldHint: false, ...t.annotations },
         })),
       });
     }
@@ -127,7 +162,16 @@ export async function dispatch({ message, server, env, meta = {} }) {
           // Derived, non-sensitive facts the tool chooses to surface.
           classified: tool.classify?.(args, result) ?? {},
         });
-        return rpcResult(id, { content: [{ type: "text", text }] });
+        // A tool advertising an outputSchema MUST return conforming structured
+        // results. The serialized JSON stays in the text block, which is what
+        // the spec recommends for clients that ignore structuredContent, so
+        // this is purely additive.
+        return rpcResult(id, {
+          content: [{ type: "text", text }],
+          ...(tool.outputSchema && result !== null && typeof result === "object"
+            ? { structuredContent: result }
+            : {}),
+        });
       } catch (err) {
         emit({
           outcome: "tool_error",
@@ -153,6 +197,7 @@ export async function dispatch({ message, server, env, meta = {} }) {
 // ------------------------------------------------------------- fetch handler
 
 export function createFetchHandler(server) {
+  assertServerShape(server);
   return async function fetch(request, env, ctx) {
     const url = new URL(request.url);
 
