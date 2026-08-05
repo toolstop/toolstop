@@ -1,6 +1,7 @@
 {
   "name": "mcp-check-digits",
   "version": "0.1.1",
+  "mcpName": "dev.toolstop/check-digits",
   "description": "MCP server that catches mistyped bank accounts, payment cards, barcodes, VINs and other structured identifiers before a bad one causes a failed payment, a rejected claim or a corrupted record.",
   "type": "module",
   "bin": {

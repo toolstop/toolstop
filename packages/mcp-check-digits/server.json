@@ -1,6 +1,28 @@
 {
-  "name": "check-digits",
-  "hostname": "check-digits.toolstop.dev",
-  "description": "Catch mistyped bank accounts, payment cards, barcodes, VINs and other structured identifiers before a bad one causes a failed payment, a rejected claim or a corrupted record.",
-  "transport": "streamable-http"
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "dev.toolstop/check-digits",
+  "title": "Check Digits",
+  "description": "Catch a mistyped IBAN, card, barcode, VIN or routing number before it causes a failed payment.",
+  "version": "0.1.1",
+  "websiteUrl": "https://check-digits.toolstop.dev",
+  "repository": {
+    "url": "https://github.com/jamesonhohbein/toolstop",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://check-digits.toolstop.dev"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "mcp-check-digits",
+      "version": "0.1.1",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
 }
