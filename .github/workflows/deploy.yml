@@ -6,8 +6,11 @@ name: Deploy
 # Required repository secrets:
 #   CLOUDFLARE_API_TOKEN   - scoped to Workers Scripts:Edit
 #   CLOUDFLARE_ACCOUNT_ID
-#   NPM_TOKEN              - granular access token, write on mcp-*, bypass 2FA
 #   MCP_PRIVATE_KEY        - Ed25519 key proving control of toolstop.dev
+#
+# npm needs no secret: it authenticates by OIDC via trusted publishing, which is
+# configured per package on npmjs.com against this repo and this filename. If you
+# rename this file, every package's trusted publisher config breaks.
 
 on:
   push:
@@ -78,6 +81,9 @@ jobs:
     needs: [discover, deploy]
     if: needs.discover.outputs.targets != '[]'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # npm trusted publishing signs with a GitHub OIDC token
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -88,6 +94,13 @@ jobs:
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm 11.5.1 or later. Node 22 ships npm 10.9,
+      # which ignores OIDC and falls back to looking for a token it will not
+      # find, so without this the publish fails on a missing-auth error that
+      # says nothing about versions.
+      - name: Upgrade npm past the trusted-publishing floor
+        run: npm install -g npm@^11
 
       - id: check
         name: Is this version already published
@@ -103,12 +116,13 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # No token. OIDC also gets us provenance for free, which is a verifiable
+      # link from the tarball back to this commit and workflow run: worth having
+      # when the whole product asks strangers to trust an unknown vendor.
       - name: Publish to npm
         if: steps.check.outputs.publish == 'true'
         working-directory: packages/${{ matrix.package }}
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install mcp-publisher
         if: steps.check.outputs.publish == 'true'

@@ -132,7 +132,23 @@ the `<namespace>/<name>` pattern, and `mcpName` matching `server.json`'s `name`.
 Those live in a test rather than being discovered at publish time, because a
 registry rejection three jobs downstream is illegible.
 
-**Namespace is `dev.toolstop/<server>`, authenticated by a DNS TXT record on the
+**npm auth is trusted publishing, not a token.** Configured per package on
+npmjs.com against this repo and the workflow **filename** `deploy.yml`. Renaming
+that file silently breaks every package's config, so do not.
+
+Two consequences. Trusted publishing needs npm 11.5.1 or later and Node 22 ships
+npm 10.9, so the publish job upgrades npm first; without it the failure is a
+missing-auth error that says nothing about versions. And publishing this way
+produces provenance automatically, a verifiable link from the tarball back to
+the commit and workflow run that built it. That is worth more here than it
+sounds, since the whole product asks strangers to trust an unknown vendor.
+
+**One manual step per new server**, alongside attaching the custom domain: add
+the trusted publisher on npmjs.com. Whether that can be done before a package's
+first publish is untested here; if it cannot, publish the first version by hand
+and let CI take over from the second.
+
+**Registry namespace is `dev.toolstop/<server>`, authenticated by a DNS TXT record on the
 apex of `toolstop.dev`.** The alternative, `mcp-publisher login github-oidc`,
 needs no stored secret at all, and it is the option the upstream docs recommend.
 It is not used here because OIDC can only assert `io.github.jamesonhohbein/*`,
@@ -198,12 +214,11 @@ CI needs exactly one Cloudflare permission: **Workers Scripts: Edit**. Not the
 nothing here uses. No client IP filtering, because GitHub runner IPs rotate.
 
 Required repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
-`NPM_TOKEN` (granular access token, write on `mcp-*`, **Bypass 2FA** enabled, or
-publishing 403s), `MCP_PRIVATE_KEY`.
+`MCP_PRIVATE_KEY`.
 
-A granular npm token cannot be scoped to a package that does not exist yet, and
-these are unscoped names with no `@org` pattern to select. The first publish of
-a new server needs a token with **All packages** write access; narrow it after.
+**npm needs no secret.** It authenticates by OIDC through trusted publishing.
+There is no long-lived credential to leak, rotate or scope, which is why npm
+warns against automation tokens and recommends this instead.
 
 **Secrets never go in `wrangler.toml`.** It is committed.
 
