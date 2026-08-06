@@ -30,7 +30,7 @@ Remote, over streamable HTTP. No install, no account:
 Local, over stdio:
 
 ```bash
-npx mcp-check-digits
+npx @toolstop/check-digits
 ```
 
 ## Design

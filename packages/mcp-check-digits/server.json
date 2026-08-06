@@ -6,7 +6,7 @@
   "version": "0.1.1",
   "websiteUrl": "https://check-digits.toolstop.dev",
   "repository": {
-    "url": "https://github.com/jamesonhohbein/toolstop",
+    "url": "https://github.com/toolstop/toolstop",
     "source": "github"
   },
   "remotes": [
@@ -18,7 +18,7 @@
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "mcp-check-digits",
+      "identifier": "@toolstop/check-digits",
       "version": "0.1.1",
       "transport": {
         "type": "stdio"
