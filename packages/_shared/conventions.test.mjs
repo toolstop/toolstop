@@ -144,6 +144,18 @@ for (const { package: pkg, server } of servers) {
     }
   });
 
+  test(`${pkg}: publishes under the @toolstop scope`, () => {
+    const pkgJson = read("package.json");
+    // CI's npm token is scoped to @toolstop, so an unscoped name would fail to
+    // publish with a permissions error rather than anything descriptive. The
+    // scope is also what keeps names from being a per-server land grab.
+    assert.match(
+      pkgJson.name,
+      /^@toolstop\//,
+      `${pkgJson.name} is outside the @toolstop scope, which CI's npm token cannot publish`,
+    );
+  });
+
   test(`${pkg}: server.json is publishable to the MCP registry`, () => {
     const serverJson = read("server.json");
     const pkgJson = read("package.json");

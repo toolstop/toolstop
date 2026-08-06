@@ -7,10 +7,13 @@ name: Deploy
 #   CLOUDFLARE_API_TOKEN   - scoped to Workers Scripts:Edit
 #   CLOUDFLARE_ACCOUNT_ID
 #   MCP_PRIVATE_KEY        - Ed25519 key proving control of toolstop.dev
+#   NPM_TOKEN              - granular token, read+write, scoped to @toolstop
 #
-# npm needs no secret: it authenticates by OIDC via trusted publishing, which is
-# configured per package on npmjs.com against this repo and this filename. If you
-# rename this file, every package's trusted publisher config breaks.
+# NPM_TOKEN is scoped to the @toolstop scope, not to named packages and not to
+# "All packages". npm warns against the latter and points at trusted publishing
+# instead, but that is configured one package at a time from a page that only
+# exists after the package does, so it cannot cover a portfolio. Selecting the
+# scope is the version of that advice which scales.
 
 on:
   push:
@@ -82,7 +85,7 @@ jobs:
     if: needs.discover.outputs.targets != '[]'
     runs-on: ubuntu-latest
     permissions:
-      id-token: write   # npm trusted publishing signs with a GitHub OIDC token
+      id-token: write   # not for auth: this is what lets npm attach provenance
       contents: read
     strategy:
       fail-fast: false
@@ -95,12 +98,6 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
-      # Trusted publishing needs npm 11.5.1 or later. Node 22 ships npm 10.9,
-      # which ignores OIDC and falls back to looking for a token it will not
-      # find, so without this the publish fails on a missing-auth error that
-      # says nothing about versions.
-      - name: Upgrade npm past the trusted-publishing floor
-        run: npm install -g npm@^11
 
       - id: check
         name: Is this version already published
@@ -116,13 +113,19 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # No token. OIDC also gets us provenance for free, which is a verifiable
-      # link from the tarball back to this commit and workflow run: worth having
-      # when the whole product asks strangers to trust an unknown vendor.
+      # --provenance attaches a signed, verifiable link from the tarball back to
+      # this commit and workflow run. It needs id-token: write above but not
+      # OIDC auth, so a token publish keeps it. Worth having when the whole
+      # product asks strangers to trust an unknown vendor.
+      #
+      # --access public because a scoped package is private by default and would
+      # otherwise fail on a free account.
       - name: Publish to npm
         if: steps.check.outputs.publish == 'true'
         working-directory: packages/${{ matrix.package }}
-        run: npm publish --access public
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install mcp-publisher
         if: steps.check.outputs.publish == 'true'

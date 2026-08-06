@@ -31,7 +31,7 @@ Local, over stdio:
   "mcpServers": {
     "check-digits": {
       "command": "npx",
-      "args": ["-y", "mcp-check-digits"]
+      "args": ["-y", "@toolstop/check-digits"]
     }
   }
 }
@@ -60,7 +60,7 @@ cannot tell you the thing it names exists.
 identifier checked and whether it passed, never the value. That boundary is
 enforced by a test rather than a promise: see
 `packages/_shared/transport.test.mjs` in the
-[repo](https://github.com/jamesonhohbein/toolstop).
+[repo](https://github.com/toolstop/toolstop).
 
 Running over stdio, nothing leaves your machine at all.
 

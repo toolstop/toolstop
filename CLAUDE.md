@@ -132,30 +132,37 @@ the `<namespace>/<name>` pattern, and `mcpName` matching `server.json`'s `name`.
 Those live in a test rather than being discovered at publish time, because a
 registry rejection three jobs downstream is illegible.
 
-**npm auth is trusted publishing, not a token.** Configured per package on
-npmjs.com against this repo and the workflow **filename** `deploy.yml`. Renaming
-that file silently breaks every package's config, so do not.
+**Every package is published under the `@toolstop` scope.** That is what makes
+publishing scale, and it is load-bearing rather than cosmetic:
 
-Two consequences. Trusted publishing needs npm 11.5.1 or later and Node 22 ships
-npm 10.9, so the publish job upgrades npm first; without it the failure is a
-missing-auth error that says nothing about versions. And publishing this way
-produces provenance automatically, a verifiable link from the tarball back to
-the commit and workflow run that built it. That is worth more here than it
-sounds, since the whole product asks strangers to trust an unknown vendor.
+- **One credential for the whole portfolio.** `NPM_TOKEN` is a granular token
+  scoped to `@toolstop`, so a new server needs no npm setup at all. npm steers
+  CI toward trusted publishing instead, and it is right that an "All packages"
+  token is too broad, but trusted publishing is configured one package at a time
+  from a settings page that only exists *after* the package does. That is a
+  manual web step per server plus a chicken-and-egg on every first publish.
+  Selecting the scope is that advice in a form that survives server N.
+- **Names stop being a land grab.** An unscoped `mcp-<thing>` has to be won
+  again for every server and anyone can take the next one. The scope is claimed
+  once and everything under it is yours.
 
-**One manual step per new server**, alongside attaching the custom domain: add
-the trusted publisher on npmjs.com. Whether that can be done before a package's
-first publish is untested here; if it cannot, publish the first version by hand
-and let CI take over from the second.
+Consequences to remember: a scoped package is private by default, so publishing
+needs `--access public` or it fails on a free account. `conventions.test.mjs`
+asserts the scope, so a server cannot quietly publish outside the token's reach.
+
+Publishing passes `--provenance`, which attaches a signed link from the tarball
+back to the commit and workflow run that built it. It needs `id-token: write`
+but not OIDC auth, so a token publish keeps it. Worth more here than it sounds,
+since the whole product asks strangers to trust an unknown vendor.
 
 **Registry namespace is `dev.toolstop/<server>`, authenticated by a DNS TXT record on the
 apex of `toolstop.dev`.** The alternative, `mcp-publisher login github-oidc`,
 needs no stored secret at all, and it is the option the upstream docs recommend.
-It is not used here because OIDC can only assert `io.github.jamesonhohbein/*`,
-which puts a personal GitHub account in front of every listing. Spec §5 and §11
-name vendor trust as the highest structural risk, so the namespace is doing
-brand work and paying for it with a stored key is the right side of that trade.
-Reverse it by changing two strings and swapping the login step.
+It is not used here because OIDC can only assert `io.github.<org>/*`. Now that
+the repo lives in the `toolstop` org that would read as a vendor too, so this is
+a closer call than it was, but `dev.toolstop` keys on the domain, which is the
+asset actually owned and does not move if the code ever leaves GitHub. Reverse
+it by changing two strings and swapping the login step.
 
 The TXT record goes on the **apex**, not a `_mcp-auth` selector. MCP DNS auth is
 SPF-style placement, and a selector fails with a generic signature error that
@@ -214,11 +221,8 @@ CI needs exactly one Cloudflare permission: **Workers Scripts: Edit**. Not the
 nothing here uses. No client IP filtering, because GitHub runner IPs rotate.
 
 Required repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
-`MCP_PRIVATE_KEY`.
-
-**npm needs no secret.** It authenticates by OIDC through trusted publishing.
-There is no long-lived credential to leak, rotate or scope, which is why npm
-warns against automation tokens and recommends this instead.
+`MCP_PRIVATE_KEY`, `NPM_TOKEN` (granular, read and write, scoped to the
+`@toolstop` **scope** rather than to named packages).
 
 **Secrets never go in `wrangler.toml`.** It is committed.
 
