@@ -6,6 +6,14 @@ name: Deploy
 # Required repository secrets:
 #   CLOUDFLARE_API_TOKEN   - scoped to Workers Scripts:Edit
 #   CLOUDFLARE_ACCOUNT_ID
+#   MCP_PRIVATE_KEY        - Ed25519 key proving control of toolstop.dev
+#   NPM_TOKEN              - granular token, read+write, scoped to @toolstop
+#
+# NPM_TOKEN is scoped to the @toolstop scope, not to named packages and not to
+# "All packages". npm warns against the latter and points at trusted publishing
+# instead, but that is configured one package at a time from a page that only
+# exists after the package does, so it cannot cover a portfolio. Selecting the
+# scope is the version of that advice which scales.
 
 on:
   push:
@@ -62,3 +70,79 @@ jobs:
       # A green deploy that serves errors is worse than a failed one.
       - name: Smoke test the live endpoint
         run: node scripts/smoke.mjs ${{ matrix.package }}
+
+  # Publishing is downstream of a passing smoke test on purpose. The registry
+  # listing advertises the remote URL, so publishing before the endpoint is known
+  # good would point strangers at a broken server.
+  #
+  # There is no version tag and no release ceremony. The job publishes when
+  # package.json carries a version npm does not have yet, and no-ops otherwise,
+  # so a normal code push is silent and bumping the version is the whole release
+  # process. That also makes it self-healing: a publish that fails on a flaky
+  # network retries on the next push instead of needing a tag deleted and remade.
+  publish:
+    needs: [discover, deploy]
+    if: needs.discover.outputs.targets != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # not for auth: this is what lets npm attach provenance
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.discover.outputs.targets) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+
+      - id: check
+        name: Is this version already published
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          NAME="$(node -p 'require("./package.json").name')"
+          VERSION="$(node -p 'require("./package.json").version')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION is already on npm, nothing to publish"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --provenance attaches a signed, verifiable link from the tarball back to
+      # this commit and workflow run. It needs id-token: write above but not
+      # OIDC auth, so a token publish keeps it. Worth having when the whole
+      # product asks strangers to trust an unknown vendor.
+      #
+      # --access public because a scoped package is private by default and would
+      # otherwise fail on a free account.
+      - name: Publish to npm
+        if: steps.check.outputs.publish == 'true'
+        working-directory: packages/${{ matrix.package }}
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install mcp-publisher
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+          sudo mv mcp-publisher /usr/local/bin/
+
+      # DNS auth, not github-oidc, because the namespace is dev.toolstop and OIDC
+      # can only assert io.github.<user>. See CLAUDE.md for the trade.
+      - name: Authenticate to the MCP registry
+        if: steps.check.outputs.publish == 'true'
+        run: mcp-publisher login dns --domain toolstop.dev --private-key "$MCP_PRIVATE_KEY"
+        env:
+          MCP_PRIVATE_KEY: ${{ secrets.MCP_PRIVATE_KEY }}
+
+      - name: Publish to the MCP registry
+        if: steps.check.outputs.publish == 'true'
+        working-directory: packages/${{ matrix.package }}
+        run: mcp-publisher publish

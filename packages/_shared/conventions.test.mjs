@@ -14,7 +14,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, existsSync } from "node:fs";
+import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 import { assertServerShape } from "./http.mjs";
@@ -115,6 +115,68 @@ for (const { package: pkg, server } of servers) {
       }
     });
   }
+}
+
+// Publishing runs unattended, so everything the registry and npm will reject has
+// to fail here instead. The registry rejects on its own constraints and npm
+// rejects a version that already exists, and neither failure is legible from a
+// red CI job three steps downstream.
+//
+// The version assertion is the important one. This project has now been bitten
+// twice by npm and the live endpoint drifting apart, and a single version
+// spelled in three files is exactly the shape that drifts.
+const REGISTRY_NAME = /^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/;
+const REGISTRY_DESCRIPTION_MAX = 100;
+
+for (const { package: pkg, server } of servers) {
+  const dir = join(PACKAGES_DIR, pkg);
+  const read = (f) => JSON.parse(readFileSync(join(dir, f), "utf8"));
+
+  test(`${pkg}: one version, spelled the same in every file`, () => {
+    const pkgJson = read("package.json");
+    const serverJson = read("server.json");
+    assert.equal(server.version, pkgJson.version, "tools.mjs disagrees with package.json");
+    assert.equal(serverJson.version, pkgJson.version, "server.json disagrees with package.json");
+    const npmEntry = serverJson.packages?.find((p) => p.registryType === "npm");
+    if (npmEntry) {
+      assert.equal(npmEntry.version, pkgJson.version, "server.json npm entry is a stale version");
+      assert.equal(npmEntry.identifier, pkgJson.name, "server.json points at a different npm package");
+    }
+  });
+
+  test(`${pkg}: publishes under the @toolstop scope`, () => {
+    const pkgJson = read("package.json");
+    // CI's npm token is scoped to @toolstop, so an unscoped name would fail to
+    // publish with a permissions error rather than anything descriptive. The
+    // scope is also what keeps names from being a per-server land grab.
+    assert.match(
+      pkgJson.name,
+      /^@toolstop\//,
+      `${pkgJson.name} is outside the @toolstop scope, which CI's npm token cannot publish`,
+    );
+  });
+
+  test(`${pkg}: server.json is publishable to the MCP registry`, () => {
+    const serverJson = read("server.json");
+    const pkgJson = read("package.json");
+    for (const field of ["name", "description", "version"]) {
+      assert.ok(serverJson[field], `server.json is missing the required field "${field}"`);
+    }
+    assert.match(serverJson.name, REGISTRY_NAME, "registry names are <namespace>/<name>");
+    assert.ok(
+      serverJson.description.length <= REGISTRY_DESCRIPTION_MAX,
+      `description is ${serverJson.description.length} chars; the registry caps it at ${REGISTRY_DESCRIPTION_MAX} and rejects the submission`,
+    );
+    // The registry reads mcpName off the published tarball to prove the package
+    // and the listing have the same owner. A mismatch fails at publish time.
+    assert.equal(
+      pkgJson.mcpName,
+      serverJson.name,
+      "package.json mcpName must equal server.json name or the registry rejects the listing",
+    );
+    const remote = serverJson.remotes?.find((r) => r.type === "streamable-http");
+    assert.ok(remote?.url, "server.json declares no streamable-http remote for CI to smoke test");
+  });
 }
 
 test("tool names are unique across the whole portfolio", () => {
