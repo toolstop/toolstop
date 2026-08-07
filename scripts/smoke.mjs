@@ -4,9 +4,10 @@
 
 import { readFileSync } from "node:fs";
 
-// Accepts either a full URL, or a package name whose hostname is read from its
-// wrangler.toml. The latter keeps the hostname declared in exactly one place;
-// CI never reconstructs it from parts.
+// Accepts either a full URL, or a package name whose endpoint is read from its
+// server.json. That file is now the MCP registry's own schema rather than a
+// local invention, so the URL CI smoke-tests and the URL the registry publishes
+// are the same string and cannot drift.
 function resolveBase(arg) {
   if (!arg) return null;
   if (/^https?:\/\//.test(arg)) return arg.replace(/\/$/, "");
@@ -17,11 +18,12 @@ function resolveBase(arg) {
     console.error(`No packages/${arg}/server.json. Pass a package name or a URL.`);
     process.exit(2);
   }
-  if (!meta.hostname) {
-    console.error(`packages/${arg}/server.json has no "hostname".`);
+  const url = meta.remotes?.find((r) => r.type === "streamable-http")?.url;
+  if (!url) {
+    console.error(`packages/${arg}/server.json declares no streamable-http remote.`);
     process.exit(2);
   }
-  return `https://${meta.hostname}`;
+  return url.replace(/\/$/, "");
 }
 
 const base = resolveBase(process.argv[2]);

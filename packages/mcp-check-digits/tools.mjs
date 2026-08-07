@@ -64,13 +64,18 @@ const CHECK_RESULT_PROPERTIES = {
 
 export default {
   name: "check-digits",
-  version: "0.1.0",
+  version: "0.1.1",
   instructions:
-    "Validates check digits for structured identifiers. Call these tools instead " +
-    "of reasoning about whether an identifier is well-formed: the arithmetic is " +
-    "exact and guessing is not. Every tool here answers a question about " +
-    "arithmetic only. None of them can tell you whether an identifier " +
-    "corresponds to something that exists in the world.\n\n" +
+    "Catches mistyped bank accounts, payment cards, barcodes, VINs and other " +
+    "structured identifiers before a bad one causes a failed payment, a " +
+    "rejected claim or a corrupted record.\n\n" +
+    "Call these tools instead of reasoning about whether an identifier is " +
+    "well-formed: the arithmetic is exact and guessing is not. Each check digit " +
+    "is computed over the whole string, so a value with one wrong or " +
+    "transposed character looks exactly like a correct one. There is nothing to " +
+    "see by eye. Every tool here answers a question about arithmetic only. None " +
+    "of them can tell you whether an identifier corresponds to something that " +
+    "exists in the world.\n\n" +
     "Choosing between them: if you already know what the identifier is meant to " +
     "be, call validate_identifier with that `kind`. If you do not know, call " +
     "identify_format first and pass a returned `kind` back to " +
@@ -82,18 +87,23 @@ export default {
   tools: [
     {
       name: "validate_identifier",
-      title: "Validate an identifier's check digit",
+      title: "Check whether an identifier is mistyped",
       description:
-        "Verify the check digit of a structured identifier: IBAN, LEI, ISBN-10, " +
-        "ISBN-13, GTIN/UPC/EAN, VIN, NPI, ISIN, ABA routing number, or payment " +
-        "card. Returns whether the checksum passes and, when it fails, the " +
-        "specific reason. Use it when you already know which format the " +
-        "identifier is meant to be; if you do not, call identify_format first " +
-        "rather than guessing a `kind`, since a valid identifier checked against " +
-        "the wrong format comes back invalid. A passing checksum " +
-        "proves only that the digits are internally consistent: it does not mean " +
-        "the account, card, book, vehicle or provider exists, is active, or " +
-        "belongs to any particular person.",
+        "Verify a number when you already know what it is supposed to be. Use " +
+        "this whenever someone gives you a bank account (IBAN), a US routing " +
+        "number (ABA), a payment card, a product barcode (GTIN, UPC or EAN), a " +
+        "book number (ISBN-10 or ISBN-13), a vehicle VIN, a US healthcare " +
+        "provider NPI, a security ISIN, or a legal entity LEI, and acting on a " +
+        "wrong one would cost something: money sent nowhere, a declined " +
+        "transaction, a bounced claim, a rejected listing, a record that " +
+        "quietly corrupts a dataset.\n\n" +
+        "Returns whether the checksum passes and, when it fails, the specific " +
+        "reason. If you do not already know the format, call identify_format " +
+        "first rather than guessing a `kind`, since a valid identifier checked " +
+        "against the wrong format comes back invalid. A passing checksum proves " +
+        "only that the digits are internally consistent: it does not mean the " +
+        "account, card, book, vehicle or provider exists, is active, or belongs " +
+        "to any particular person.",
       inputSchema: {
         type: "object",
         properties: {
@@ -129,14 +139,19 @@ export default {
 
     {
       name: "identify_format",
-      title: "Identify which format an identifier matches",
+      title: "Work out what an unlabeled number is",
       description:
-        "Given an unknown identifier, test it against every supported format and " +
-        "report which ones its check digit satisfies. Use it when you have a bare " +
-        "number or code and need to know what kind of thing it is. More than one " +
-        "format can match, because short numeric identifiers sometimes satisfy " +
-        "several checksums by coincidence, so treat a lone match as a hint rather " +
-        "than proof. As with validation, a match means the arithmetic is " +
+        "Identify a bare number whose type was never recorded. Tests it against " +
+        "every supported format and reports which ones its check digit " +
+        "satisfies. Use it for an unlabeled spreadsheet column, a value pulled " +
+        "out of a log line or a scanned document, or any number handed over " +
+        "without being named.\n\n" +
+        "Reports every format that matches rather than choosing between them. " +
+        "Several matches is normal and does not mean the answer is unclear: " +
+        "some formats are subsets of others, so every ISBN-13 is also a valid " +
+        "EAN-13, and a short value can satisfy two unrelated formats by chance. " +
+        "Read one match as strong evidence and several as a set to narrow from " +
+        "context. As with validation, a match means the arithmetic is " +
         "consistent, not that the identifier is registered or real.",
       inputSchema: {
         type: "object",
@@ -195,15 +210,18 @@ export default {
 
     {
       name: "compute_luhn_digit",
-      title: "Compute a Luhn check digit",
+      title: "Complete a number that is missing its check digit",
       description:
-        "Given a digit string with its final check digit omitted, return the " +
-        "single digit that makes the whole string Luhn-valid. Luhn is the " +
-        "algorithm behind payment cards, NPI numbers and ISINs, so this is how " +
-        "you complete a partial identifier of those kinds. Input must reduce to " +
-        "digits only once spaces and dashes are stripped; anything else is an " +
-        "error. This constructs a well-formed number and nothing more: it does " +
-        "not create, reserve or verify a real card, provider or security.",
+        "Given digits with the final check digit omitted, return the one that " +
+        "completes them. Payment cards, US healthcare NPIs and securities ISINs " +
+        "all use the Luhn formula.\n\n" +
+        "Use it to build valid test fixtures, to recover a last digit that was " +
+        "lost or illegible, or to check an implementation against a reference. " +
+        "To test a number you already have in full, use validate_identifier " +
+        "instead. Input must reduce to digits only once spaces and dashes are " +
+        "stripped; anything else is an error. This constructs a well-formed " +
+        "number and nothing more: it does not create, reserve or verify a real " +
+        "card, provider or security.",
       inputSchema: {
         type: "object",
         properties: {
