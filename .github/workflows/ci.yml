@@ -44,8 +44,31 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
-      # Transport, validation and the telemetry privacy boundary.
+      # Transport, validation and the telemetry privacy boundary, plus the two
+      # suites that walk packages/mcp-*/ off the filesystem: every tool called
+      # through HTTP with its declared examples, and every stdio entrypoint
+      # driven as a real child process.
       - run: node --test packages/_shared/*.test.mjs
+
+  # The npm tarball is half this project's distribution and is built by prepack
+  # at publish time, so nothing in the repo is the artifact. This packs it,
+  # installs it somewhere clean and runs the published bin over stdio, which is
+  # the only place the rewritten `../_shared/` imports are ever executed.
+  tarball:
+    needs: discover
+    if: needs.discover.outputs.packages != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.discover.outputs.packages) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Pack, install and run ${{ matrix.package }}
+        run: node scripts/tarball-check.mjs ${{ matrix.package }}
 
   prose:
     runs-on: ubuntu-latest

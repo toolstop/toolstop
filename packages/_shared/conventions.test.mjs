@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
-import { assertServerShape } from "./http.mjs";
+import { assertServerShape, validate } from "./http.mjs";
 
 const PACKAGES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -103,6 +103,29 @@ for (const { package: pkg, server } of servers) {
         STATES_A_LIMIT,
         "description states no limitation. Say what a result does not mean, which is the defect most likely to make an agent mislead a user.",
       );
+    });
+
+    // The one field that makes a tool testable. behavior.test.mjs and
+    // stdio.test.mjs both drive whatever they find here, so requiring it is what
+    // stops server #2 shipping with handlers nothing ever calls: before this,
+    // the only tools with call coverage were the three named by hand in
+    // transport.test.mjs.
+    test(`${pkg}: ${tool.name} declares runnable examples`, () => {
+      assert.ok(
+        Array.isArray(tool.examples) && tool.examples.length > 0,
+        "tool declares no examples, so nothing in the suite can call it",
+      );
+      for (const [i, example] of tool.examples.entries()) {
+        assert.ok(
+          example.args && typeof example.args === "object",
+          `example ${i} has no args object`,
+        );
+        // Run the transport's own input validation over the example, so a schema
+        // change that invalidates a fixture fails here with the reason rather
+        // than as an isError three files away.
+        const errors = validate(tool.inputSchema, example.args);
+        assert.deepEqual(errors, [], `example ${i} does not satisfy the tool's own inputSchema`);
+      }
     });
 
     test(`${pkg}: ${tool.name} declares complete schemas`, () => {
