@@ -19,7 +19,11 @@ const rpcError = (id, code, message) => ({ jsonrpc: JSONRPC, id, error: { code, 
 
 // ------------------------------------------------------------------ validation
 
-function validate(schema, args) {
+// Exported so the shared suite can point the same rules at a tool's declared
+// outputSchema. A tool that advertises a schema and then returns something else
+// is a defect no client can defend against, and checking it with the transport's
+// own validator means the check cannot drift from what the transport enforces.
+export function validate(schema, args) {
   const errors = [];
   const props = schema?.properties ?? {};
   const required = schema?.required ?? Object.keys(props);

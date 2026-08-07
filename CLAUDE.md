@@ -23,6 +23,10 @@ smoke tests, and starts recording traffic. **Never edit a workflow to add a
 server.** If that becomes necessary, `scripts/discover.mjs` is what needs
 fixing.
 
+`test.mjs` covers `lib.mjs`. Everything about the *tools* is covered by the
+shared suites without writing a line, on one condition: every tool declares
+`examples`. See below.
+
 **One manual step per server:** attach `<name>.toolstop.dev` as a Worker custom
 domain, once, from a session with a full-permission login:
 
@@ -103,6 +107,29 @@ field earlier. Prose in the array's own `description` says the same thing for a
 quarter of the size. Schemas are the larger half of the payload, not
 descriptions: measure before trimming prose.
 
+**Every tool declares `examples`, and that is what makes it tested.** An
+example is `{ args, expect }`, where `expect` is a subset match against
+`structuredContent`. Declaring them is not documentation, it is the whole
+testing contract for a tool:
+
+- `behavior.test.mjs` calls every example through the HTTP transport, asserts
+  the result conforms to the tool's own `outputSchema`, and asserts no argument
+  value reaches telemetry.
+- `stdio.test.mjs` runs the same examples against `index.mjs` as a child
+  process.
+- `tarball-check.mjs` runs them again against the installed npm package.
+- `smoke.mjs` runs them against the live endpoint after deploy.
+
+Before this existed, the only tools with call coverage were the three named by
+hand in `transport.test.mjs`, so server #2 could have shipped with a handler
+that threw on first call and CI would have been green: its own `test.mjs` tests
+the library under the tools, not the tools. Give at least one example per tool
+and prefer a failing case alongside a passing one, since a handler that returns
+`valid: true` unconditionally passes any suite that only feeds it good input.
+Use real published identifiers: a synthetic one is a valid call that proves
+nothing about the answer. `examples` never reaches the wire, because
+`tools/list` serializes named fields only.
+
 All of the above is enforced by `packages/_shared/conventions.test.mjs`, which
 walks `packages/mcp-*/tools.mjs` off the filesystem the way `discover.mjs` does.
 A new server is covered the moment the directory exists, so adding one requires
@@ -182,8 +209,17 @@ outside the package root, so npm would otherwise ship a tarball with no
 transport in it.
 
 ```bash
-npm pack   # from a package dir: same build CI ships, inspect before trusting it
+npm pack                                   # from a package dir: the build CI ships
+node scripts/tarball-check.mjs mcp-<name>  # pack it, install it, run it
 ```
+
+`tarball-check.mjs` is the only thing that executes the artifact. It packs,
+installs into a throwaway tree with no relationship to this repo, checks that
+`bin` and `main` resolve, then speaks MCP to the installed binary over stdio and
+asserts each tool answers its examples. Installing rather than running
+`node dist/index.mjs` in place is the point: running it in place resolves
+through the workspace and hides the exact failure being tested. It runs per
+package in CI and again before publish.
 
 Consequence in the repo: the workspace `node_modules/.bin/mcp-<name>` symlink
 dangles until something has run prepack. To exercise a server over stdio during
@@ -211,8 +247,10 @@ A change under `_shared/` redeploys every server. That is intended.
 
 ```bash
 npm test                                        # every server + shared transport
-node --test packages/mcp-<name>/test.mjs        # one server
-node scripts/smoke.mjs mcp-<name>               # protocol check, live endpoint
+node --test packages/mcp-<name>/test.mjs        # one server's library
+node --test packages/_shared/*.test.mjs         # every tool, both transports
+node scripts/tarball-check.mjs mcp-<name>       # the npm artifact, installed
+node scripts/smoke.mjs mcp-<name>               # every tool, live endpoint
 npx wrangler deploy                             # from a package dir
 ```
 

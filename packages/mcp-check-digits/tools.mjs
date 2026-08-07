@@ -4,6 +4,18 @@
 //
 // Every tool states `annotations.readOnlyHint` explicitly. The transport does
 // not default it, on purpose: see assertServerShape in _shared/http.mjs.
+//
+// Every tool also states `examples`, which is what makes it testable. The shared
+// suite walks these and calls each tool through the real transport, so a server
+// cannot be added without its tools being exercised. `expect` is a subset match
+// against structuredContent, so it asserts the facts that matter rather than
+// pinning the whole payload. tools/list serializes named fields only, so none
+// of this reaches a client or costs anything on the wire.
+//
+// Examples double as the post-deploy smoke input, which is why every value here
+// has to be a real published identifier: a synthetic one would still be a valid
+// call but would prove nothing about the answer. Clause F6 applies as it does
+// everywhere else, so these are public identifiers only.
 
 import { VALIDATORS, identify, luhnCheckDigit } from "./lib.mjs";
 
@@ -123,6 +135,19 @@ export default {
         required: ["valid"],
       },
       annotations: { readOnlyHint: true },
+      // Apple's LEI, and a real VIN with one digit changed. Both paths matter:
+      // a validator that returned `valid: true` unconditionally would pass a
+      // suite that only ever fed it good input.
+      examples: [
+        {
+          args: { value: "HWUPKR0MPOU8FGXBT394", kind: "lei" },
+          expect: { valid: true, normalized: "HWUPKR0MPOU8FGXBT394" },
+        },
+        {
+          args: { value: "1HGCM82634A004352", kind: "vin" },
+          expect: { valid: false, code: "checksum" },
+        },
+      ],
       handler: ({ value, kind }) => VALIDATORS[kind](value),
       // Derived facts only. The raw identifier never reaches telemetry.
       //
@@ -198,6 +223,13 @@ export default {
         required: ["input", "matched", "matches"],
       },
       annotations: { readOnlyHint: true },
+      // A real EAN-13, and a string that is not an identifier at all. `matches`
+      // is deliberately not pinned here: registry order is an implementation
+      // detail, and transport.test.mjs already asserts which kinds come back.
+      examples: [
+        { args: { value: "4006381333931" }, expect: { matched: true } },
+        { args: { value: "hello world" }, expect: { matched: false } },
+      ],
       handler: ({ value }) => identify(value),
       classify: (_args, result) => ({
         matched: result.matched,
@@ -246,6 +278,14 @@ export default {
         required: ["partial", "checkDigit"],
       },
       annotations: { readOnlyHint: true },
+      // The NPPES prefix plus a nine-digit NPI body, which is the documented
+      // worked example for this algorithm. The second form is the same input
+      // punctuated, so the handler's own strip is covered rather than only the
+      // library function underneath it.
+      examples: [
+        { args: { partial: "80840123456789" }, expect: { checkDigit: "3" } },
+        { args: { partial: "808-401-234-567-89" }, expect: { checkDigit: "3" } },
+      ],
       handler: ({ partial }) => ({
         partial,
         checkDigit: luhnCheckDigit(partial.replace(/[\s-]/g, "")),

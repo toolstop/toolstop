@@ -113,6 +113,15 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # The deploy job above proved the Worker serves correctly, which says
+      # nothing about the tarball: they share tools.mjs but not a transport, and
+      # dist/ is assembled by prepack seconds before publish. Run the artifact
+      # once here, on the way out, so a broken tarball fails the release instead
+      # of the first person to install it.
+      - name: Pack, install and run the tarball
+        if: steps.check.outputs.publish == 'true'
+        run: node scripts/tarball-check.mjs ${{ matrix.package }}
+
       # --provenance attaches a signed, verifiable link from the tarball back to
       # this commit and workflow run. It needs id-token: write above but not
       # OIDC auth, so a token publish keeps it. Worth having when the whole
