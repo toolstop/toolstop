@@ -3,11 +3,17 @@
 An MCP server that validates check digits for structured identifiers.
 
 Assistants are bad at modular arithmetic and good at sounding confident about
-it. This server does the arithmetic exactly, so a wrong IBAN or a mistyped VIN
-gets caught instead of confirmed.
+it. This server does the arithmetic exactly, so a wrong barcode or a mistyped
+VIN gets caught instead of confirmed.
 
-Supported: **IBAN**, **LEI**, **ISBN-10**, **ISBN-13**, **GTIN/UPC/EAN**,
-**VIN**, **NPI**, **ISIN**, **ABA routing numbers**, and **payment cards**.
+Supported: **LEI**, **ISBN-10**, **ISBN-13**, **GTIN/UPC/EAN**, **VIN**,
+**NPI**, and **ISIN**.
+
+**Not supported, on purpose: IBANs, bank account numbers, ABA routing numbers
+and payment cards.** Every format here is a public identifier. A remote server
+has no business being handed your bank details to do arithmetic that a local
+library does just as well, so this one does not ask for them and will not accept
+them. Validate those where the value already lives.
 
 ## Use it
 
@@ -48,11 +54,11 @@ Local, over stdio:
 All three are read-only and carry complete input and output schemas. Spaces and
 dashes in input are ignored.
 
-**What a pass means.** A check digit is arithmetic. A valid IBAN is not a real
-bank account, a valid card number is not a live card, and a valid ISBN is not a
-book that was ever printed. These tools tell you an identifier is internally
-consistent, which is what catches transposed digits and truncated copies. They
-cannot tell you the thing it names exists.
+**What a pass means.** A check digit is arithmetic. A valid ISBN is not a book
+that was ever printed, a valid VIN is not a car that was ever built, and a valid
+NPI is not a provider who is still practising. These tools tell you an
+identifier is internally consistent, which is what catches transposed digits and
+truncated copies. They cannot tell you the thing it names exists.
 
 ## Privacy
 
@@ -67,8 +73,8 @@ Running over stdio, nothing leaves your machine at all.
 ## What it does not do
 
 A passing check digit means the identifier is *well-formed*, not that it exists,
-is active, or belongs to anyone in particular. A valid IBAN checksum does not
-mean the account is real.
+is active, or belongs to anyone in particular. A valid GTIN checksum does not
+mean the product was ever manufactured.
 
 ## License
 

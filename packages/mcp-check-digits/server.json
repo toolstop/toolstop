@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "dev.toolstop/check-digits",
   "title": "Check Digits",
-  "description": "Catch a mistyped IBAN, card, barcode, VIN or routing number before it causes a failed payment.",
-  "version": "0.1.1",
+  "description": "Catch a mistyped barcode, ISBN, VIN, NPI or LEI before a bad identifier corrupts a record.",
+  "version": "0.2.0",
   "websiteUrl": "https://check-digits.toolstop.dev",
   "repository": {
     "url": "https://github.com/toolstop/toolstop",
@@ -19,7 +19,7 @@
     {
       "registryType": "npm",
       "identifier": "@toolstop/check-digits",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "transport": {
         "type": "stdio"
       }

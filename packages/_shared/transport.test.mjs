@@ -9,7 +9,10 @@ function fakeEnv() {
   return { env: { MCP_EVENTS: { writeDataPoint: (r) => rows.push(r) } }, rows };
 }
 
-const REAL_IBAN = "GB82 WEST 1234 5698 7654 32";
+// Apple's published LEI. A real identifier, so the no-leak assertions below are
+// testing the real thing, but a public one: clause F6 means no sensitive value
+// is ever sent to this server, including from its own test suite.
+const REAL_LEI = "HWUPKR0MPOU8FGXBT394";
 
 async function call(handler, env, body) {
   const req = new Request("https://x.example/", {
@@ -88,12 +91,12 @@ test("duplicate tool names are rejected at construction", () => {
   assert.throws(() => assertServerShape(dupe), /duplicate tool name/);
 });
 
-test("tools/call validates a real IBAN", async () => {
+test("tools/call validates a real LEI", async () => {
   const { env } = fakeEnv();
   const h = createFetchHandler(server);
   const { json } = await call(h, env, {
     jsonrpc: "2.0", id: 3, method: "tools/call",
-    params: { name: "validate_identifier", arguments: { value: REAL_IBAN, kind: "iban" } },
+    params: { name: "validate_identifier", arguments: { value: REAL_LEI, kind: "lei" } },
   });
   assert.equal(JSON.parse(json.result.content[0].text).valid, true);
 });
@@ -103,10 +106,10 @@ test("a tool with an outputSchema also returns structuredContent", async () => {
   const h = createFetchHandler(server);
   const { json } = await call(h, env, {
     jsonrpc: "2.0", id: 3, method: "tools/call",
-    params: { name: "validate_identifier", arguments: { value: REAL_IBAN, kind: "iban" } },
+    params: { name: "validate_identifier", arguments: { value: REAL_LEI, kind: "lei" } },
   });
   assert.equal(json.result.structuredContent.valid, true);
-  assert.equal(json.result.structuredContent.country, "GB");
+  assert.equal(json.result.structuredContent.normalized, REAL_LEI);
   // The serialized copy stays in the text block for clients that ignore it.
   assert.deepEqual(JSON.parse(json.result.content[0].text), json.result.structuredContent);
 });
@@ -116,10 +119,10 @@ test("the renamed tools are reachable under their new names", async () => {
   const h = createFetchHandler(server);
   const { json: id } = await call(h, env, {
     jsonrpc: "2.0", id: 1, method: "tools/call",
-    params: { name: "identify_format", arguments: { value: REAL_IBAN } },
+    params: { name: "identify_format", arguments: { value: REAL_LEI } },
   });
   assert.equal(id.result.structuredContent.matched, true);
-  assert.ok(id.result.structuredContent.matches.some((m) => m.kind === "iban"));
+  assert.ok(id.result.structuredContent.matches.some((m) => m.kind === "lei"));
 
   const { json: luhn } = await call(h, env, {
     jsonrpc: "2.0", id: 2, method: "tools/call",
@@ -190,7 +193,7 @@ test("every request is recorded", async () => {
   await call(h, env, { jsonrpc: "2.0", id: 2, method: "tools/list" });
   await call(h, env, {
     jsonrpc: "2.0", id: 3, method: "tools/call",
-    params: { name: "validate_identifier", arguments: { value: REAL_IBAN, kind: "iban" } },
+    params: { name: "validate_identifier", arguments: { value: REAL_LEI, kind: "lei" } },
   });
   assert.equal(rows.length, 3, "expected one row per request");
   const methods = rows.map((r) => r.blobs[2]);
@@ -204,46 +207,53 @@ test("telemetry never contains the raw argument value", async () => {
   const h = createFetchHandler(server);
   await call(h, env, {
     jsonrpc: "2.0", id: 1, method: "tools/call",
-    params: { name: "validate_identifier", arguments: { value: REAL_IBAN, kind: "iban" } },
+    params: { name: "validate_identifier", arguments: { value: REAL_LEI, kind: "lei" } },
   });
   const dump = JSON.stringify(rows);
-  assert.ok(!dump.includes("GB82"), "raw IBAN leaked into telemetry");
-  assert.ok(!dump.includes("WEST"), "raw IBAN leaked into telemetry");
-  assert.ok(!dump.includes("765432"), "raw IBAN leaked into telemetry");
+  assert.ok(!dump.includes("HWUPKR"), "raw identifier leaked into telemetry");
+  assert.ok(!dump.includes("FGXBT"), "raw identifier leaked into telemetry");
+  assert.ok(!dump.includes("T394"), "raw identifier leaked into telemetry");
   // Shape and outcome are kept.
   // Shape and derived outcome are kept, parsed from their own blobs rather than
   // sniffed out of the stringified row.
   const argShape = JSON.parse(rows[0].blobs[12]);
   const classified = JSON.parse(rows[0].blobs[13]);
-  assert.equal(argShape.value, `str:${REAL_IBAN.length}`);
-  assert.equal(classified.kind, "iban");
+  assert.equal(argShape.value, `str:${REAL_LEI.length}`);
+  assert.equal(classified.kind, "lei");
   assert.equal(classified.valid, true);
 });
 
 // The leak the greps above could not see. Validators build prose that
-// interpolates the input, so forwarding `reason` put a real IBAN's country code
-// into telemetry. Only the bounded `code` crosses that boundary now.
+// interpolates the input, so forwarding `reason` put a substring derived from a
+// real identifier into telemetry. Only the bounded `code` crosses that boundary.
+//
+// The original fixture was a short GB IBAN, whose reason carried the country
+// code. IBAN is gone under F6, so the guard now rides on VIN, which is the
+// remaining validator whose failure path is built from the input: the reason
+// interpolates the expected check digit, and the result carries the character
+// the VIN actually holds at position 9.
 test("a failure reason that embeds the input never reaches telemetry", async () => {
   const { env, rows } = fakeEnv();
   const h = createFetchHandler(server);
-  // GB IBANs are 22 characters. This one is 20, so the validator produces
-  // "GB IBANs are 22 characters, got 20", which carries the country code.
-  const SHORT_GB = "GB82WEST123456987654";
+  // One digit off a real VIN, so the check digit disagrees and the validator
+  // produces "check digit at position 9 should be 1".
+  const BAD_VIN = "1HGCM82634A004352";
   const { json } = await call(h, env, {
     jsonrpc: "2.0", id: 1, method: "tools/call",
-    params: { name: "validate_identifier", arguments: { value: SHORT_GB, kind: "iban" } },
+    params: { name: "validate_identifier", arguments: { value: BAD_VIN, kind: "vin" } },
   });
 
   const classified = JSON.parse(rows[0].blobs[13]);
-  assert.equal(classified.code, "length", "the bounded code is what gets recorded");
+  assert.equal(classified.code, "checksum", "the bounded code is what gets recorded");
   assert.equal(classified.reason, undefined, "free-text reason must not be forwarded");
 
   const dump = JSON.stringify(rows);
-  assert.ok(!dump.includes("IBANs are"), "reason prose leaked into telemetry");
-  assert.ok(!dump.includes("WEST"), "raw IBAN leaked into telemetry");
+  assert.ok(!dump.includes("check digit at position"), "reason prose leaked into telemetry");
+  assert.ok(!dump.includes("HGCM"), "raw identifier leaked into telemetry");
+  assert.ok(!dump.includes("expectedCheckDigit"), "derived input characters leaked into telemetry");
 
   // The caller still gets the detail: it is their own data, and it is useful.
-  assert.match(json.result.structuredContent.reason, /GB IBANs are 22 characters/);
+  assert.match(json.result.structuredContent.reason, /check digit at position 9 should be 1/);
 });
 
 test("session id is stable within a request and non-identifying", async () => {
