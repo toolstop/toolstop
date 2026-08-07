@@ -24,7 +24,7 @@ const CHECK_RESULT_PROPERTIES = {
   },
   code: {
     type: "string",
-    enum: ["format", "length", "unknown_country", "checksum"],
+    enum: ["format", "length", "checksum"],
     description: "Bounded reason the check failed. Absent when valid.",
   },
   reason: {
@@ -37,20 +37,12 @@ const CHECK_RESULT_PROPERTIES = {
   },
   country: {
     type: "string",
-    description: "ISO country code parsed from the identifier. IBAN and ISIN only.",
+    description: "ISO country code parsed from the identifier. ISIN only.",
   },
   width: {
     type: "string",
     enum: ["EAN-8", "UPC-A", "EAN-13", "GTIN-14"],
     description: "The resolved width of a GTIN. GTIN input only.",
-  },
-  brand: {
-    type: "string",
-    description: "Card scheme inferred from the prefix. Payment cards only.",
-  },
-  length: {
-    type: "integer",
-    description: "Length of the normalized identifier.",
   },
   expectedCheckDigit: {
     type: "string",
@@ -64,11 +56,15 @@ const CHECK_RESULT_PROPERTIES = {
 
 export default {
   name: "check-digits",
-  version: "0.1.1",
+  version: "0.2.0",
   instructions:
-    "Catches mistyped bank accounts, payment cards, barcodes, VINs and other " +
-    "structured identifiers before a bad one causes a failed payment, a " +
-    "rejected claim or a corrupted record.\n\n" +
+    "Catches mistyped barcodes, VINs, ISBNs and other public structured " +
+    "identifiers before a bad one causes a rejected listing, a bounced claim " +
+    "or a corrupted record.\n\n" +
+    "This server deliberately does not handle bank accounts, IBANs, routing " +
+    "numbers or payment cards. Do not send them here. Validate those locally " +
+    "instead, with a library, so the value never leaves the machine that " +
+    "already has it.\n\n" +
     "Call these tools instead of reasoning about whether an identifier is " +
     "well-formed: the arithmetic is exact and guessing is not. Each check digit " +
     "is computed over the whole string, so a value with one wrong or " +
@@ -90,19 +86,20 @@ export default {
       title: "Check whether an identifier is mistyped",
       description:
         "Verify a number when you already know what it is supposed to be. Use " +
-        "this whenever someone gives you a bank account (IBAN), a US routing " +
-        "number (ABA), a payment card, a product barcode (GTIN, UPC or EAN), a " +
-        "book number (ISBN-10 or ISBN-13), a vehicle VIN, a US healthcare " +
+        "this whenever someone gives you a product barcode (GTIN, UPC or EAN), " +
+        "a book number (ISBN-10 or ISBN-13), a vehicle VIN, a US healthcare " +
         "provider NPI, a security ISIN, or a legal entity LEI, and acting on a " +
-        "wrong one would cost something: money sent nowhere, a declined " +
-        "transaction, a bounced claim, a rejected listing, a record that " +
-        "quietly corrupts a dataset.\n\n" +
+        "wrong one would cost something: a bounced claim, a rejected listing, " +
+        "a record that quietly corrupts a dataset.\n\n" +
+        "Every supported format is a public identifier. Bank accounts, IBANs, " +
+        "routing numbers and payment cards are not supported and must not be " +
+        "sent.\n\n" +
         "Returns whether the checksum passes and, when it fails, the specific " +
         "reason. If you do not already know the format, call identify_format " +
         "first rather than guessing a `kind`, since a valid identifier checked " +
         "against the wrong format comes back invalid. A passing checksum proves " +
         "only that the digits are internally consistent: it does not mean the " +
-        "account, card, book, vehicle or provider exists, is active, or belongs " +
+        "book, product, vehicle or provider exists, is active, or belongs " +
         "to any particular person.",
       inputSchema: {
         type: "object",
@@ -177,7 +174,7 @@ export default {
               "Every format whose check digit the input satisfies, in registry " +
               "order. Each entry carries `kind` plus the same format-specific " +
               "fields validate_identifier returns for that format, such as " +
-              "`country` for an IBAN or `brand` for a card. Only satisfied " +
+              "`country` for an ISIN or `width` for a GTIN. Only satisfied " +
               "formats are listed, so no entry carries `code` or `reason`.",
             items: {
               type: "object",
@@ -213,15 +210,16 @@ export default {
       title: "Complete a number that is missing its check digit",
       description:
         "Given digits with the final check digit omitted, return the one that " +
-        "completes them. Payment cards, US healthcare NPIs and securities ISINs " +
-        "all use the Luhn formula.\n\n" +
+        "completes them. US healthcare NPIs and securities ISINs use the Luhn " +
+        "formula.\n\n" +
         "Use it to build valid test fixtures, to recover a last digit that was " +
         "lost or illegible, or to check an implementation against a reference. " +
         "To test a number you already have in full, use validate_identifier " +
         "instead. Input must reduce to digits only once spaces and dashes are " +
-        "stripped; anything else is an error. This constructs a well-formed " +
-        "number and nothing more: it does not create, reserve or verify a real " +
-        "card, provider or security.",
+        "stripped; anything else is an error. Payment cards also use Luhn, and " +
+        "are deliberately out of scope here: do not pass card digits, partial " +
+        "or complete. This constructs a well-formed number and nothing more: " +
+        "it does not create, reserve or verify a real provider or security.",
       inputSchema: {
         type: "object",
         properties: {

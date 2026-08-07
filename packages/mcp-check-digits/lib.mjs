@@ -45,49 +45,11 @@ function mod97(numeric) {
 const lettersToDigits = (s) =>
   s.replace(/[A-Z]/g, (c) => String(c.charCodeAt(0) - 55));
 
-// ------------------------------------------------------------------------ IBAN
-
-// Official registry lengths. An IBAN of the wrong length for its country is
-// invalid even when the checksum happens to pass.
-const IBAN_LENGTHS = {
-  AD: 24, AE: 23, AL: 28, AT: 20, AZ: 28, BA: 20, BE: 16, BG: 22, BH: 22,
-  BR: 29, BY: 28, CH: 21, CR: 22, CY: 28, CZ: 24, DE: 22, DK: 18, DO: 28,
-  EE: 20, EG: 29, ES: 24, FI: 18, FO: 18, FR: 27, GB: 22, GE: 22, GI: 23,
-  GL: 18, GR: 27, GT: 28, HR: 21, HU: 28, IE: 22, IL: 23, IQ: 23, IS: 26,
-  IT: 27, JO: 30, KW: 30, KZ: 20, LB: 28, LC: 32, LI: 21, LT: 20, LU: 20,
-  LV: 21, LY: 25, MC: 27, MD: 24, ME: 22, MK: 19, MR: 27, MT: 31, MU: 30,
-  NL: 18, NO: 15, PK: 24, PL: 28, PS: 29, PT: 25, QA: 29, RO: 24, RS: 22,
-  SA: 24, SC: 31, SD: 18, SE: 24, SI: 19, SK: 24, SM: 27, ST: 25, SV: 28,
-  TL: 23, TN: 24, TR: 26, UA: 29, VA: 22, VG: 24, XK: 20,
-};
-
-export function validateIban(input) {
-  const s = clean(input);
-  if (!/^[A-Z]{2}\d{2}[A-Z0-9]+$/.test(s)) {
-    return { valid: false, code: "format", reason: "must start with 2 letters then 2 digits" };
-  }
-  const country = s.slice(0, 2);
-  const expected = IBAN_LENGTHS[country];
-  if (expected === undefined) {
-    return { valid: false, code: "unknown_country", reason: `unknown IBAN country code "${country}"` };
-  }
-  if (s.length !== expected) {
-    return {
-      valid: false,
-      code: "length",
-      reason: `${country} IBANs are ${expected} characters, got ${s.length}`,
-    };
-  }
-  const rearranged = lettersToDigits(s.slice(4) + s.slice(0, 4));
-  const ok = mod97(rearranged) === 1;
-  return {
-    valid: ok,
-    country,
-    length: s.length,
-    normalized: s,
-    ...(ok ? {} : { code: "checksum", reason: "mod-97 checksum failed" }),
-  };
-}
+// IBAN, ABA routing and payment card validators lived here and were removed
+// under clause F6: this server does not accept sensitive input at all, and the
+// trigger is receipt, not storage. The arithmetic was never the problem. Asking
+// a stranger to paste a bank account or a card number into a remote server was.
+// See CLAUDE.md, "Constraints that are not negotiable".
 
 // ------------------------------------------------------------------------- LEI
 
@@ -202,47 +164,9 @@ export function validateIsin(input) {
   return { valid: ok, country: s.slice(0, 2), normalized: s, ...(ok ? {} : { code: "checksum", reason: "Luhn checksum failed" }) };
 }
 
-// ---------------------------------------------------------------- ABA routing
-
-export function validateAba(input) {
-  const s = clean(input);
-  if (!/^\d{9}$/.test(s)) return { valid: false, code: "format", reason: "ABA routing number is 9 digits" };
-  const d = [...s].map((c) => c.charCodeAt(0) - 48);
-  const sum =
-    3 * (d[0] + d[3] + d[6]) + 7 * (d[1] + d[4] + d[7]) + 1 * (d[2] + d[5] + d[8]);
-  const ok = sum % 10 === 0;
-  return { valid: ok, normalized: s, ...(ok ? {} : { code: "checksum", reason: "ABA weighted checksum failed" }) };
-}
-
-// -------------------------------------------------------------- credit cards
-
-const CARD_BRANDS = [
-  { brand: "Visa", re: /^4\d{12}(\d{3})?(\d{3})?$/ },
-  { brand: "Mastercard", re: /^(5[1-5]\d{14}|2(2[2-9]\d{12}|[3-6]\d{13}|7[01]\d{12}|720\d{12}))$/ },
-  { brand: "American Express", re: /^3[47]\d{13}$/ },
-  { brand: "Discover", re: /^(6011\d{12}|65\d{14}|64[4-9]\d{13})$/ },
-  { brand: "JCB", re: /^35(2[89]|[3-8]\d)\d{12}$/ },
-  { brand: "Diners Club", re: /^3(0[0-5]|[68]\d)\d{11}$/ },
-  { brand: "UnionPay", re: /^62\d{14,17}$/ },
-];
-
-export function validateCard(input) {
-  const s = clean(input);
-  if (!/^\d{12,19}$/.test(s)) return { valid: false, code: "format", reason: "card numbers are 12-19 digits" };
-  const ok = luhn(s);
-  const match = CARD_BRANDS.find((b) => b.re.test(s));
-  return {
-    valid: ok,
-    brand: match?.brand ?? "unknown",
-    length: s.length,
-    ...(ok ? {} : { code: "checksum", reason: "Luhn checksum failed" }),
-  };
-}
-
 // ------------------------------------------------------------------ dispatch
 
 export const VALIDATORS = {
-  iban: validateIban,
   lei: validateLei,
   isbn10: validateIsbn10,
   isbn13: validateIsbn13,
@@ -250,8 +174,6 @@ export const VALIDATORS = {
   vin: validateVin,
   npi: validateNpi,
   isin: validateIsin,
-  aba: validateAba,
-  card: validateCard,
 };
 
 /** Try every validator and report which formats the input satisfies. */

@@ -1,8 +1,8 @@
 {
   "name": "@toolstop/check-digits",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "mcpName": "dev.toolstop/check-digits",
-  "description": "MCP server that catches mistyped bank accounts, payment cards, barcodes, VINs and other structured identifiers before a bad one causes a failed payment, a rejected claim or a corrupted record.",
+  "description": "MCP server that catches mistyped barcodes, ISBNs, VINs and other public structured identifiers before a bad one causes a rejected listing, a bounced claim or a corrupted record.",
   "type": "module",
   "bin": {
     "mcp-check-digits": "dist/index.mjs"
@@ -21,10 +21,6 @@
     "validation",
     "data-validation",
     "typo-detection",
-    "iban",
-    "aba",
-    "routing-number",
-    "credit-card",
     "luhn",
     "gtin",
     "upc",
