@@ -243,6 +243,33 @@ server should be able to read exactly what they installed.
 
 A change under `_shared/` redeploys every server. That is intended.
 
+### A GET is three different questions, and 405 answers only one
+
+Every GET used to return `405 Method Not Allowed` whatever the path, which is
+defensible for an endpoint that only speaks POST and was still wrong. Three
+unrelated callers arrive by GET and they need different answers:
+
+| Request | Answer | Why |
+|---|---|---|
+| `GET /` with `Accept: text/event-stream` | **405**, `Allow: POST` | The client is opening the server-initiated SSE stream. The transport spec says a server that does not offer one replies 405, so this is the one case the old behavior got right. |
+| `GET /` from a browser | **200**, a small HTML page | A human evaluating an unknown vendor pasted the hostname in. An error page reads as "this is broken", which is the opposite of what the listing is for. |
+| `GET /.well-known/…`, or any unknown path | **404** | A client probing `oauth-protected-resource` reads 404 as "no OAuth here" and proceeds. It has no defined reading for a 405, and neither does anything else walking well-known paths. |
+
+`Accept` is the only thing separating the first two, since both are a GET on
+`/`. Do not route them on user-agent.
+
+This is measured, not hypothetical: `check-digits.toolstop.dev` served ~167 GET
+405s a day, and the paths were agent and MCP discovery conventions being
+enumerated by crawlers (`/.well-known/mcp.json`, `/.well-known/agent-card.json`,
+`/.well-known/glama.json`, `/llms.txt`, `/openapi.json`, plus both OAuth
+documents). 47 a day were bare `/`, some from a real browser.
+
+The landing page is generated in `http.mjs` from the server object alone, so a
+new server gets one with no extra file and it cannot drift from the tool list.
+It interpolates server-supplied strings into HTML, so **anything added to it
+must go through `escapeHtml`**; there is a test that fails if a tool title
+escapes unescaped.
+
 ## Operations
 
 ```bash

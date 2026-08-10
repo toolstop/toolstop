@@ -179,6 +179,81 @@ test("unknown tool is a protocol error", async () => {
   assert.equal(json.error.code, -32602);
 });
 
+// --------------------------------------------------------------- GET routing
+//
+// These exist because every GET used to answer 405 regardless of path, which
+// made three different questions indistinguishable: "open me an SSE stream",
+// "what is this URL", and "do you require OAuth". Only the first has 405 as its
+// correct answer.
+
+async function get(handler, env, path, headers = {}) {
+  const req = new Request(`https://x.example${path}`, { method: "GET", headers });
+  return handler(req, env, {});
+}
+
+test("a browser GET on the MCP endpoint gets a readable page, not an error", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler(server);
+  const res = await get(h, env, "/", { accept: "text/html" });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type"), /text\/html/);
+  const body = await res.text();
+  assert.match(body, new RegExp(server.name));
+  // The page has to name the tools, or it says nothing a directory or a human
+  // could not have guessed from the hostname.
+  for (const t of server.tools) assert.match(body, new RegExp(t.name));
+});
+
+test("a GET asking for an event stream still gets 405, per the transport spec", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler(server);
+  const res = await get(h, env, "/", { accept: "text/event-stream" });
+  assert.equal(res.status, 405);
+  assert.equal(res.headers.get("allow"), "POST");
+});
+
+test("an unknown path is 404, so auth discovery reads as 'no OAuth required'", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler(server);
+  for (const path of [
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-authorization-server",
+    "/robots.txt",
+    "/wp-admin/install.php",
+  ]) {
+    const res = await get(h, env, path);
+    assert.equal(res.status, 404, `${path} should be 404, got ${res.status}`);
+  }
+});
+
+test("health still answers, and HEAD is routed like GET", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler(server);
+  assert.equal((await get(h, env, "/health")).status, 200);
+
+  const head = await h(new Request("https://x.example/", { method: "HEAD" }), env, {});
+  assert.equal(head.status, 200);
+});
+
+test("a method that is neither read nor POST is still 405", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler(server);
+  const res = await h(new Request("https://x.example/", { method: "DELETE" }), env, {});
+  assert.equal(res.status, 405);
+  assert.equal(res.headers.get("allow"), "POST");
+});
+
+test("the landing page escapes server-supplied text", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler({
+    ...server,
+    tools: [{ ...server.tools[0], title: '<script>alert(1)</script>' }],
+  });
+  const body = await (await get(h, env, "/")).text();
+  assert.ok(!body.includes("<script>alert(1)</script>"));
+  assert.match(body, /&lt;script&gt;/);
+});
+
 test("notifications get 202 and no body", async () => {
   const { env } = fakeEnv();
   const h = createFetchHandler(server);
