@@ -198,16 +198,78 @@ export async function dispatch({ message, server, env, meta = {} }) {
   }
 }
 
+// ----------------------------------------------------------------- landing page
+
+const escapeHtml = (s) =>
+  String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+// What a human sees when they paste the hostname into a browser. Worth having
+// because the endpoint is otherwise indistinguishable from a broken host: the
+// only other thing a GET could return is an error, and someone evaluating an
+// unknown vendor reads that as "this does not work" rather than "wrong method".
+function landingPage(server, origin) {
+  const npm = `https://www.npmjs.com/package/@toolstop/${server.name}`;
+  const tools = (server.tools ?? [])
+    .map((t) => `<li><code>${escapeHtml(t.name)}</code> ${escapeHtml(t.title ?? "")}</li>`)
+    .join("\n");
+
+  return `<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(server.name)} - MCP server</title>
+<style>
+  body { max-width: 34rem; margin: 4rem auto; padding: 0 1.5rem;
+         font: 16px/1.6 system-ui, sans-serif; }
+  code { background: #8881; padding: .1em .3em; border-radius: 3px; }
+  ul { padding-left: 1.2rem }
+  @media (prefers-color-scheme: dark) { body { background: #111; color: #eee } a { color: #7bf } }
+</style>
+<h1>${escapeHtml(server.name)}</h1>
+<p>An MCP server, version ${escapeHtml(server.version)}. This URL speaks
+<a href="https://modelcontextprotocol.io">Model Context Protocol</a> over
+streamable HTTP; it answers <code>POST</code>, not <code>GET</code>, so there is
+nothing else to see here in a browser.</p>
+<p>Add it to an MCP client as <code>${escapeHtml(origin)}</code>, or run it
+locally from <a href="${escapeHtml(npm)}">npm</a>.</p>
+<h2>Tools</h2>
+<ul>
+${tools}
+</ul>
+<p><a href="https://github.com/toolstop/toolstop">Source</a> (MIT) &middot;
+<a href="/health">health</a></p>
+`;
+}
+
 // ------------------------------------------------------------- fetch handler
 
 export function createFetchHandler(server) {
   assertServerShape(server);
   return async function fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const read = request.method === "GET" || request.method === "HEAD";
 
-    if (request.method === "GET" && url.pathname === "/health") {
+    if (read && url.pathname === "/health") {
       return Response.json({ ok: true, server: server.name, version: server.version });
     }
+
+    // A GET on the MCP endpoint is how a client opens the server-initiated SSE
+    // stream, and the spec says a server that does not offer one answers 405.
+    // That is a different question from "what is at this URL", which is what a
+    // browser is asking, and the two are told apart by Accept alone.
+    if (read && url.pathname === "/") {
+      if ((request.headers.get("accept") ?? "").includes("text/event-stream")) {
+        return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
+      }
+      return new Response(landingPage(server, url.origin), {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
+
+    // Anything else read from a path this server does not have is a 404, not a
+    // 405. Discovery probes land here -- `/.well-known/oauth-protected-resource`
+    // most consequentially, where a client reads 404 as "no OAuth required" and
+    // proceeds, but has no defined reading for a 405.
+    if (read) return new Response("Not Found", { status: 404 });
 
     if (request.method !== "POST") {
       return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
