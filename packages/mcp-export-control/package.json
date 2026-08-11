@@ -1,6 +1,6 @@
 {
   "name": "@toolstop/export-control",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "mcpName": "dev.toolstop/export-control",
   "description": "MCP server that answers whether the US Commerce Country Chart requires an export licence for a given ECCN to a given destination, from the published CFR tables.",
   "type": "module",

@@ -14,6 +14,7 @@ import {
   listCountries,
   REASON_CODES,
 } from "./lib.mjs";
+import { ECCNS } from "./data.mjs";
 
 test("the chart data loaded and covers the published destinations", () => {
   const countries = listCountries();
@@ -116,8 +117,45 @@ test("entries the chart does not decide are kept and flagged", () => {
   // 0A002 is subject to the ITAR; it has no country-chart table. Dropping such
   // entries would make a real, controlled ECCN answer "unknown".
   const r = lookupEccn("0A002");
-  assert.equal(r.status, "ok");
+  assert.equal(r.status, "indeterminate");
   assert.equal(r.chartDetermined, false);
+  assert.ok(r.title.length, "the heading is the useful part of an unanswerable entry");
+});
+
+// The whole point of the guard. 0A983 reads "a license is required for ALL
+// destinations" as prose, so an entry with no chart controls is the opposite of
+// an entry with no requirement.
+test("an entry with no chart control refuses to answer instead of clearing it", () => {
+  for (const eccn of ["0A983", "0A981", "0A002", "9A103"]) {
+    const r = checkLicense(eccn, "France");
+    assert.equal(r.status, "indeterminate", `${eccn} was given a chart verdict`);
+    assert.equal(r.licenseRequired, undefined, `${eccn} answered from an empty control list`);
+    assert.match(r.message, /not.*no licence required|Do not read this as/i);
+  }
+});
+
+// The invariant, over the whole list rather than a hand-picked entry. A verdict
+// has to be backed by a control that was actually read. An entry whose controls
+// are empty says nothing about licensing, and "nothing" must not be rendered as
+// `false`, which is how 72 entries cleared every destination before this.
+//
+// Note what this does *not* require: that a false verdict names a control. An
+// entry controlled only for RS1 and AT1 legitimately clears Canada, which marks
+// neither, and reports nothing triggered. The distinction is between a control
+// that was read and did not fire, and a control that was never there.
+test("no destination gets a verdict from an entry with no controls", () => {
+  const sample = ["Canada", "Japan", "Germany", "China", "Russia", "Brazil", "India"];
+  let answered = 0;
+  for (const eccn of Object.keys(ECCNS)) {
+    for (const country of sample) {
+      const r = checkLicense(eccn, country);
+      if (r.status !== "ok") continue;
+      answered++;
+      assert.ok(ECCNS[eccn].c.length, `${eccn} to ${country} was answered from an empty control list`);
+      assert.equal(typeof r.licenseRequired, "boolean");
+    }
+  }
+  assert.ok(answered > 3000, `only ${answered} lookups were answered at all`);
 });
 
 test("controls the chart does not decide are surfaced, not swallowed", () => {
