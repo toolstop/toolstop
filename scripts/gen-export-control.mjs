@@ -48,8 +48,27 @@ const args = Object.fromEntries(
     return [k, v];
   }),
 );
-const DATE = args.date ?? new Date().toISOString().slice(0, 10);
 const CACHE = args.cache ?? null;
+
+/**
+ * The edition to label the data with, and to ask eCFR for.
+ *
+ * Today's date is the wrong default even though it returns the right content.
+ * `SOURCE_EDITION` is quoted back to callers as what this data is current to,
+ * and every tool description cites it, so it has to be the date the regulation
+ * was last issued rather than the date someone happened to run this. It also
+ * makes the output stable: labelling with today would produce a diff every run
+ * and the refresh workflow could not tell a real amendment from the calendar.
+ */
+async function latestEdition() {
+  const res = await fetch("https://www.ecfr.gov/api/versioner/v1/titles.json");
+  if (!res.ok) throw new Error(`eCFR title index returned ${res.status}`);
+  const title = (await res.json()).titles.find((t) => t.number === 15);
+  if (!title?.latest_issue_date) throw new Error("no latest_issue_date for title 15");
+  return title.latest_issue_date;
+}
+
+const DATE = args.date ?? (await latestEdition());
 
 /** The sixteen reason-for-control codes. A column outside this set is a parse error. */
 const REASON_CODES = new Set(["AT", "CB", "CC", "CW", "EI", "FC", "MT", "NP", "NS", "RS", "SI", "SL", "SS", "UN"]);

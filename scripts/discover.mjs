@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Emits GitHub Actions outputs: every package, and the subset whose files
-// changed in this push. Adding a server requires no workflow edit: the matrix
-// is derived from the filesystem.
+// Emits GitHub Actions outputs: every package, the subset whose files changed
+// in this push, and the subset that embeds regenerable data. Adding a server
+// requires no workflow edit: the matrix is derived from the filesystem.
 
 import { readdirSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
@@ -33,5 +33,11 @@ if (only) {
   changed = sharedTouched || diff === "" ? all : all.filter((p) => touched.has(p));
 }
 
+// A server embeds regenerable data when it ships a generator. The name is the
+// contract: scripts/gen-<name>.mjs regenerates packages/mcp-<name>/data.mjs, so
+// the refresh workflow needs no list of its own either.
+const generators = all.filter((name) => existsSync(`scripts/gen-${name.replace(/^mcp-/, "")}.mjs`));
+
 console.log(`packages=${JSON.stringify(all)}`);
 console.log(`changed=${JSON.stringify(changed)}`);
+console.log(`generators=${JSON.stringify(generators)}`);
