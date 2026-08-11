@@ -14,7 +14,7 @@ import {
   listCountries,
   REASON_CODES,
 } from "./lib.mjs";
-import { ECCNS } from "./data.mjs";
+import { COUNTRIES, ECCNS } from "./data.mjs";
 
 test("the chart data loaded and covers the published destinations", () => {
   const countries = listCountries();
@@ -123,15 +123,33 @@ test("entries the chart does not decide are kept and flagged", () => {
 });
 
 // The whole point of the guard. 0A983 reads "a license is required for ALL
-// destinations" as prose, so an entry with no chart controls is the opposite of
-// an entry with no requirement.
-test("an entry with no chart control refuses to answer instead of clearing it", () => {
-  for (const eccn of ["0A983", "0A981", "0A002", "9A103"]) {
+// destinations", so an entry the chart does not decide is the opposite of an
+// entry with no requirement.
+test("an entry the chart does not decide refuses to answer instead of clearing it", () => {
+  for (const eccn of ["0A983", "0A981", "1C355", "5D980", "0A002", "9A103"]) {
     const r = checkLicense(eccn, "France");
     assert.equal(r.status, "indeterminate", `${eccn} was given a chart verdict`);
-    assert.equal(r.licenseRequired, undefined, `${eccn} answered from an empty control list`);
-    assert.match(r.message, /not.*no licence required|Do not read this as/i);
+    assert.equal(r.licenseRequired, undefined, `${eccn} was answered without a chart control`);
   }
+});
+
+// The requirement is the whole value of an entry the chart cannot answer. It
+// was dropped entirely by the first generator, which is what made these entries
+// look uncontrolled.
+test("an off-chart control returns the requirement text verbatim", () => {
+  const r = checkLicense("0A983", "France");
+  assert.equal(r.controlsNotOnChart.length, 1);
+  assert.match(r.controlsNotOnChart[0].requirement, /license is required for ALL destinations/i);
+  assert.match(r.message, /verbatim|not a finding|before treating anything as cleared/i);
+});
+
+test("a control the chart does decide is still answered normally", () => {
+  // 6D201's two rows carry a trailing empty cell, and dropping them for that
+  // lost an NP control on software for high-speed imaging.
+  const r = checkLicense("6D201", "Pakistan");
+  assert.equal(r.status, "ok");
+  assert.equal(r.licenseRequired, true);
+  assert.ok(r.triggeredBy.some((t) => t.column === "NP1"), "NP1 must trigger for Pakistan");
 });
 
 // The invariant, over the whole list rather than a hand-picked entry. A verdict
@@ -165,11 +183,54 @@ test("controls the chart does not decide are surfaced, not swallowed", () => {
   assert.ok(r.controlsNotOnChart.every((c) => c.requirement.length > 0));
 });
 
-test("every reason code on a looked-up entry expands to a name", () => {
-  const r = lookupEccn("5A002");
-  assert.equal(r.status, "ok");
-  for (const { code, name } of r.reasons) {
-    assert.ok(REASON_CODES[code], `unknown reason code ${code}`);
-    assert.equal(name, REASON_CODES[code]);
+// Over every entry, not one clean example. Checking only 5A002 is why 20
+// entries shipped with the paragraphs following the reason line parsed as
+// reason codes: 5E002 carried 341 of them, 329 expanding to null.
+test("every reason code on every entry expands to a name", () => {
+  for (const eccn of Object.keys(ECCNS)) {
+    const r = lookupEccn(eccn);
+    for (const { code, name } of r.reasons ?? []) {
+      assert.ok(REASON_CODES[code], `${eccn}: "${code}" is not a reason-for-control code`);
+      assert.equal(name, REASON_CODES[code]);
+    }
+    assert.ok(r.reasons.length < 8, `${eccn} has ${r.reasons.length} reasons, which is prose, not codes`);
   }
+});
+
+// Both bugs are invisible in any single lookup: a truncated string still reads
+// as a sentence, and an undecoded entity still reads as a name. Türkiye was
+// stored as "T&#xFC;rkiye" and could not be found by any spelling at all.
+test("no stored string is truncated or carries an undecoded entity", () => {
+  const strings = [
+    ...Object.keys(COUNTRIES),
+    ...Object.values(ECCNS).flatMap((e) => [e.t, ...e.c.flatMap((c) => [c[0], c[1]])]),
+  ];
+  for (const s of strings) {
+    assert.doesNotMatch(s, /&[a-z]+;|&#x?[0-9a-f]+;/i, `undecoded entity: ${s.slice(0, 60)}`);
+  }
+  // A cap is invisible string by string, since a cut sentence still reads as a
+  // sentence. It is visible in the longest one: the previous generator capped
+  // at 220 and put 153 titles and 70 control strings exactly on it, so nothing
+  // in the data could be longer. The Control List has headings well past that,
+  // and a scope caveat is the operative text of a control, so losing its tail
+  // changes what the entry says.
+  const longest = Math.max(...strings.map((s) => s.length));
+  assert.ok(longest > 400, `longest stored string is ${longest} characters, which is a truncation cap`);
+});
+
+test("destinations the chart spells with an accent are reachable", () => {
+  for (const [q, expected] of [["Turkey", "Türkiye"], ["Türkiye", "Türkiye"], ["Turkiye", "Türkiye"],
+    ["Curacao", "Curaçao"], ["Curaçao", "Curaçao"], ["Macao", "Macau"]]) {
+    assert.equal(lookupCountry(q).country, expected, `${q} did not resolve`);
+  }
+});
+
+test("a footnote comes back with its text, not just its number", () => {
+  const r = lookupCountry("Belarus");
+  assert.ok(r.footnotes.length, "Belarus carries footnote 6");
+  for (const f of r.footnotes) {
+    assert.equal(typeof f.number, "number");
+    assert.ok(f.text?.length > 20, `footnote ${f.number} has no text`);
+  }
+  assert.match(r.footnotes[0].text, /746\.5|746\.8/, "footnote 6 is the Russia and Belarus sanctions");
 });

@@ -174,6 +174,36 @@ no edit there either. Two of its checks are heuristics over description text and
 will occasionally be wrong; when one misfires, widen the pattern rather than
 working around it.
 
+**A server carrying embedded data commits the generator that produced it, and
+tests the data against its source rather than the library against the data.**
+`export-control` embeds two federal tables. Its first generator was never
+committed, only a pair of `curl` lines in the README, so the transformation was
+unreviewable and unreproducible. Seven defects shipped and every one was green:
+21 entries whose licence requirement is written as prose rather than as a table
+lost it entirely and then answered `licenseRequired: false` for every
+destination, including implements of torture, whose entry reads "a license is
+required for ALL destinations"; XML entities were never decoded, so Türkiye was
+stored as `T&#xFC;rkiye` and could not be found by any spelling; and every
+string was cut at 220 characters mid-word, which hit 153 titles.
+
+None of that is visible in the output. A truncated sentence still reads as a
+sentence, an undecoded name still reads as a name, and an empty control list
+renders as a clean negative answer. `test.mjs` covered the library's handling of
+the data and could not see any of it, and the one test that would have caught
+the reason-code corruption checked a single hand-picked entry that happened to
+be clean.
+
+Two rules follow, and they are cheap:
+
+- **The generator asserts before it writes.** `scripts/gen-export-control.mjs`
+  fails the build on an entry with a licence section and no control parsed out
+  of it, a reason code outside the fourteen, a chart column that is not on the
+  chart, or an undecoded entity in any string. A parser that cannot read its
+  source must stop rather than emit a plausible table.
+- **Data tests iterate the whole table.** Over all 637 entries, not one example.
+  The cost is milliseconds and it is the only thing that finds the twentieth
+  malformed entry.
+
 **Servers are zero-dependency.** No MCP SDK, no zod. Stateless
 request/response MCP makes hand-rolled dispatch small enough that dropping both
 is worth it: faster cold starts, and no supply chain.
