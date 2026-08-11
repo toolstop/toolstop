@@ -49,6 +49,13 @@ transport emits one row per request describing *what kind* of call happened and
 whether it succeeded. `packages/_shared/transport.test.mjs` asserts that no raw
 argument value can reach it.
 
+The row also carries a session id, and it is derived from the **network** the
+request came from, truncated to a /24 or /48 before hashing, never the full
+address. Hashing the whole IP would not have anonymised it: the IPv4 space is 32
+bits and the other inputs are public, so the id was walkable back to one address
+until this was fixed on 2026-08-10. Each server's README states the complete
+recorded row rather than only what is left out.
+
 **Every tool declares `readOnlyHint`, a complete `inputSchema` and an
 `outputSchema`**, so a client can tell what a call will do before making it and
 what shape comes back. The transport refuses to start a server whose tools do
