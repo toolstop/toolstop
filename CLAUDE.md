@@ -365,16 +365,49 @@ unrelated callers arrive by GET and they need different answers:
 |---|---|---|
 | `GET /` with `Accept: text/event-stream` | **405**, `Allow: POST` | The client is opening the server-initiated SSE stream. The transport spec says a server that does not offer one replies 405, so this is the one case the old behavior got right. |
 | `GET /` from a browser | **200**, a small HTML page | A human evaluating an unknown vendor pasted the hostname in. An error page reads as "this is broken", which is the opposite of what the listing is for. |
-| `GET /.well-known/…`, or any unknown path | **404** | A client probing `oauth-protected-resource` reads 404 as "no OAuth here" and proceeds. It has no defined reading for a 405, and neither does anything else walking well-known paths. |
+| `GET /.well-known/glama.json` | **200**, a small JSON document | The one well-known path with an answer. See below. |
+| `GET /.well-known/…` anything else, or any unknown path | **404** | A client probing `oauth-protected-resource` reads 404 as "no OAuth here" and proceeds. It has no defined reading for a 405, and neither does anything else walking well-known paths. |
 
 `Accept` is the only thing separating the first two, since both are a GET on
 `/`. Do not route them on user-agent.
+
+**404 stays the default for well-known paths, and `glama.json` is the exception
+that shows why.** The rule is not "answer discovery probes", which would be an
+endless chase: nine distinct crawlers enumerate ten conventions here, and every
+one of them is a directory that has already found the server by other means.
+Answering costs a route and buys nothing, and for the OAuth pair answering would
+be actively wrong. The test is narrower: does a 404 *lose* something that cannot
+be recovered elsewhere? For `glama.json` it does, because the file is the only
+way to claim a *remote* server on Glama. The repo-root `glama.json` route claims
+servers Glama indexed through GitHub, and these are indexed by hostname. Without
+it the listing exists and stays unclaimed, with no error to observe.
+
+Two traps in it, both silent. **Glama publishes two schemas that disagree**:
+`connector.json` (served here) takes objects carrying `email`, while the
+repo-root `server.json` takes bare GitHub username strings. Serve the wrong one
+and it is a 200 that validates against nothing. And **the email must be the one
+on the Glama account**, not merely a well-formed address, since matching it is
+the entire verification. Both failures look exactly like success from this side,
+so `transport.test.mjs` pins the shape and nothing can pin the address.
 
 This is measured, not hypothetical: `check-digits.toolstop.dev` served ~167 GET
 405s a day, and the paths were agent and MCP discovery conventions being
 enumerated by crawlers (`/.well-known/mcp.json`, `/.well-known/agent-card.json`,
 `/.well-known/glama.json`, `/llms.txt`, `/openapi.json`, plus both OAuth
 documents). 47 a day were bare `/`, some from a real browser.
+
+Splitting those three answers moved the volume rather than removing it, which is
+the expected outcome and worth recording so a future reading of the graph is not
+alarming: the probes that used to count as 405s are now 404s. Measured across
+the fleet on 2026-08-11, a day after `export-control` and `prop65` went live,
+405s fell to 69/day (all of them the SSE case, which is correct) while 404s rose
+to 357/day from zero. Roughly 160 of those are discovery, named by user agent:
+`aisec-registry/0.2` walking the OAuth pair and `/.well-known/mcp`,
+`AgenstryBot/0.3.0` walking five agent-card conventions, `VerifyMCP-OwnersBot`
+after `owners.json`, and Glama's `undici` after `glama.json`. The rest is
+`/favicon.ico` and a payment-skimmer scan that would hit any host on the
+internet. **None of it is an error rate.** A new server gets discovered before
+it gets used, so a rising 404 count on a fresh hostname is the funnel working.
 
 The landing page is generated in `http.mjs` from the server object alone, so a
 new server gets one with no extra file and it cannot drift from the tool list.

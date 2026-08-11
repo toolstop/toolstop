@@ -240,6 +240,23 @@ ${tools}
 `;
 }
 
+// --------------------------------------------------------------- maintainers
+
+// Glama verifies a connector claim by matching these against the email on a
+// Glama account, so a value that is merely well-formed verifies nothing: it has
+// to be the account's own address or the file is served, fetched, and silently
+// ignored. There is no error to observe when it is wrong.
+//
+// Fleet-wide rather than per-server because there is one maintainer, and three
+// copies would be three chances to drift. Public by design: it is served from a
+// public endpoint and asserts a claim rather than guarding one.
+//
+// Note the shape. Glama has two schemas and they disagree: `connector.json`,
+// used here, wants objects carrying `email`, while the repo-root `server.json`
+// wants bare GitHub username strings. Passing one where the other is expected
+// validates as neither.
+const MAINTAINERS = [{ email: "jhohbein@gmail.com" }];
+
 // ------------------------------------------------------------- fetch handler
 
 export function createFetchHandler(server) {
@@ -250,6 +267,19 @@ export function createFetchHandler(server) {
 
     if (read && url.pathname === "/health") {
       return Response.json({ ok: true, server: server.name, version: server.version });
+    }
+
+    // The one well-known path that gets an answer instead of the 404 below.
+    // Glama's crawler fetches it to decide who may claim the connector, so
+    // without it a listing stays unclaimed however well it indexes. Serving it
+    // is not a courtesy to a crawler; it is the only way to assert ownership of
+    // a remote server, since the repo-root `glama.json` route covers only
+    // servers Glama found through GitHub.
+    if (read && url.pathname === "/.well-known/glama.json") {
+      return Response.json({
+        $schema: "https://glama.ai/mcp/schemas/connector.json",
+        maintainers: MAINTAINERS,
+      });
     }
 
     // A GET on the MCP endpoint is how a client opens the server-initiated SSE

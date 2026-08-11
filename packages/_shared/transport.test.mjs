@@ -227,6 +227,26 @@ test("an unknown path is 404, so auth discovery reads as 'no OAuth required'", a
   }
 });
 
+test("glama.json is served, and in the connector shape rather than the repo one", async () => {
+  const { env } = fakeEnv();
+  const h = createFetchHandler(server);
+  const res = await get(h, env, "/.well-known/glama.json");
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type"), /application\/json/);
+
+  const body = await res.json();
+  assert.equal(body.$schema, "https://glama.ai/mcp/schemas/connector.json");
+  // The failure this guards is silent on the wire: Glama's repo-root schema
+  // takes bare GitHub usernames and the connector schema takes objects with an
+  // `email`, so the wrong shape serves 200, validates against nothing, and
+  // leaves the connector unclaimed with no error anywhere to notice.
+  assert.ok(Array.isArray(body.maintainers) && body.maintainers.length > 0);
+  for (const m of body.maintainers) {
+    assert.equal(typeof m, "object", "maintainers must be objects, not usernames");
+    assert.match(m.email, /^[^@\s]+@[^@\s]+\.[^@\s]+$/);
+  }
+});
+
 test("health still answers, and HEAD is routed like GET", async () => {
   const { env } = fakeEnv();
   const h = createFetchHandler(server);
