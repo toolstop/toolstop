@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createFetchHandler, assertServerShape } from "./http.mjs";
+import { networkOf, sessionIdFrom } from "./telemetry.mjs";
 import server from "../mcp-check-digits/tools.mjs";
 
 // Stand-in for the Analytics Engine binding.
@@ -337,4 +338,54 @@ test("session id is stable within a request and non-identifying", async () => {
   await call(h, env, { jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
   const sid = rows[0].blobs[11];
   assert.match(sid, /^[0-9a-f]{16}$/);
+});
+
+// A session id is written to Analytics Engine on every request. It used to be
+// derived from the full client IP, which an 8-byte hash does not hide: the
+// address space is 32 bits and the other inputs are public. These assert the
+// truncation that fixes it, because the property is invisible in the output.
+
+test("the session id is derived from a network, never a whole address", () => {
+  assert.equal(networkOf("203.0.113.47"), "203.0.113.0/24");
+  assert.equal(networkOf("203.0.113.201"), "203.0.113.0/24");
+  assert.equal(networkOf("2001:db8:1:2:3:4:5:6"), "2001:db8:1::/48");
+});
+
+test("one IPv6 network has one representation, however it is spelled", () => {
+  // Slicing the raw string got this wrong: it produced `2001:db8:::/48`, and
+  // split equivalent spellings across two sessions.
+  const expected = "2001:db8:0::/48";
+  for (const spelling of ["2001:db8::1", "2001:0db8:0000:0000:0000:0000:0000:0001", "2001:DB8::1"]) {
+    assert.equal(networkOf(spelling), expected, `disagreed on ${spelling}`);
+  }
+});
+
+test("a malformed or absent address yields nothing, never a passthrough", () => {
+  // Failing open here would put the raw value straight back into the hash.
+  const bad = ["", null, undefined, "not-an-ip", "1.2.3", "1.2.3.4.5", "999.1.1.1", "1:2:3:4:5:6:7:8:9", "zzzz::1"];
+  for (const b of bad) {
+    assert.equal(networkOf(b), "", `leaked on ${JSON.stringify(b)}`);
+  }
+});
+
+test("two callers in one /24 share a session id; different /24s do not", async () => {
+  const req = (ip) =>
+    new Request("https://x.example/", { headers: { "cf-connecting-ip": ip, "user-agent": "ua/1" } });
+  const [a, b, c] = await Promise.all([
+    sessionIdFrom(req("203.0.113.47"), "s"),
+    sessionIdFrom(req("203.0.113.201"), "s"),
+    sessionIdFrom(req("198.51.100.47"), "s"),
+  ]);
+  assert.equal(a, b, "same network must collapse to one session");
+  assert.notEqual(a, c, "different networks must stay distinct");
+});
+
+test("no part of a client address survives into the session id", async () => {
+  const ip = "203.0.113.47";
+  const id = await sessionIdFrom(
+    new Request("https://x.example/", { headers: { "cf-connecting-ip": ip, "user-agent": "ua/1" } }),
+    "s",
+  );
+  assert.ok(!id.includes("203"), "octet leaked into the id");
+  assert.match(id, /^[0-9a-f]{16}$/, "id must be an opaque 8-byte digest");
 });
