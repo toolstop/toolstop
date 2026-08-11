@@ -67,6 +67,28 @@ return a `code` from a closed set (`format`, `length`, `unknown_country`,
 where the caller is reading their own data. The bounded code is better
 telemetry anyway, since it groups in SQL and survives a reworded message.
 
+**The client address is truncated to a network before anything hashes it.**
+`sessionIdFrom` covers user agent, date, server name and the caller's IP, then
+truncates SHA-256 to 8 bytes. Hashing the *full* IP did not anonymise it: the
+IPv4 space is 32 bits and every other input is public, so the space was walkable
+and the "anonymous" session id resolved back to one address. A hash does not
+hide a value smaller than itself. `networkOf` now reduces to a /24 (IPv4) or
+/48 (IPv6) first, so what is recoverable is an ISP allocation rather than a
+subscriber.
+
+Two things that look like details and are not. **`networkOf` must fail closed**:
+anything it does not recognise returns `""`, because returning the input on a
+parse miss puts the raw address straight back into the hash. And **IPv6 must be
+expanded before truncation**, since slicing the raw string both malformed the
+result (`2001:db8::1` produced `2001:db8:::/48`) and split one network across
+two session ids depending on spelling. Four tests in `transport.test.mjs` cover
+this; the property is invisible in the output, so nothing else would catch a
+regression.
+
+Cost of the fix, accepted deliberately: two callers behind one /24 running the
+same client on the same day count as one session, so session counts are a lower
+bound.
+
 **Every tool declares `readOnlyHint` explicitly. The transport must never
 default it.** It used to. `annotations: { readOnlyHint: true, ...t.annotations }`
 meant the value was manufactured rather than declared, so the two checks that
