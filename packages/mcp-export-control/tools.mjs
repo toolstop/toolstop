@@ -33,7 +33,7 @@ const STATUS_PROPERTY = {
 
 export default {
   name: "export-control",
-  version: "0.2.0",
+  version: "0.3.0",
   instructions:
     "Answers one question: does the Commerce Country Chart require an export " +
     "licence for a given ECCN to a given destination? It reads two published " +
@@ -59,13 +59,14 @@ export default {
     "carries. Country names must match the chart's own spelling; both tools " +
     "return `candidates` rather than choosing when a name is ambiguous, and " +
     "you should put that choice to a human rather than picking.\n\n" +
-    "Some entries write their licence requirement as prose rather than as a " +
-    "chart column, and some are pointers to the ITAR carrying no EAR " +
-    "requirement at all. Those return `indeterminate` rather than an answer, " +
-    "because a chart verdict computed from an entry with no chart controls " +
-    "would read as `licenseRequired: false` for items that in fact require a " +
-    "licence to every destination. Treat `indeterminate` as unanswered and go " +
-    "to the regulation.\n\n" +
+    "Not every entry is decided by the chart. Some are controlled by a " +
+    "requirement written into the entry itself, often a licence to every " +
+    "destination regardless of end-use, and some are pointers to the ITAR " +
+    "carrying no EAR requirement at all. Both return `indeterminate` with the " +
+    "requirement text verbatim, rather than a verdict, because the chart has no " +
+    "answer to give and `licenseRequired: false` would invert the real one. " +
+    "Treat `indeterminate` as unanswered, read the text it returns, and go to " +
+    "the regulation.\n\n" +
     "A result of `licenseRequired: false` means only that the country chart " +
     "does not require one for that ECCN. It is not permission to export. The " +
     "`notCovered` array on every answer lists what still applies, including " +
@@ -90,10 +91,10 @@ export default {
         "the chart at all. A `false` result means the chart alone does not " +
         "require a licence; it is not clearance to export, and it says nothing " +
         "about the Entity List, embargoes, end-use controls, or whether the " +
-        "ECCN is the right one. Entries whose requirement is not written as a " +
-        "chart column return `indeterminate` instead of a verdict, and that is " +
-        "an unanswered question rather than a negative answer. This tool cannot " +
-        "classify an item into an ECCN and will not try.",
+        "ECCN is the right one. An entry the chart does not decide returns " +
+        "`indeterminate` with its requirement text instead of a verdict, which " +
+        "is an unanswered question rather than a negative answer. This tool " +
+        "cannot classify an item into an ECCN and will not try.",
       annotations: { readOnlyHint: true, openWorldHint: false },
       inputSchema: {
         type: "object",
@@ -155,10 +156,14 @@ export default {
           expect: { status: "ok", eccn: "3A001", country: "Japan", licenseRequired: true },
         },
         {
-          // The requirement is "a license is required for ALL destinations",
-          // written as prose. An empty control list must not become `false`.
+          // Controlled by "a license is required for ALL destinations", which
+          // the chart does not decide. This must never read as `false`.
           args: { eccn: "0A983", country: "France" },
           expect: { status: "indeterminate", eccn: "0A983" },
+        },
+        {
+          args: { eccn: "3D006", country: "China" },   // added to the CCL after the first parse dropped it
+          expect: { status: "ok", eccn: "3D006", licenseRequired: true },
         },
         {
           args: { eccn: "3A001", country: "Canada" },
@@ -288,8 +293,11 @@ export default {
           },
           footnotes: {
             type: "array",
-            description: "Chart footnote numbers on this row, which carry conditions the grid does not show.",
-            items: { type: "number" },
+            description:
+              "Chart footnotes on this row, each with its number and text. They carry conditions the " +
+              "grid cannot show, such as the Russia and Belarus sanctions and the Crimea controls, and " +
+              "they can change the answer.",
+            items: { type: "object" },
           },
         },
         required: ["status"],

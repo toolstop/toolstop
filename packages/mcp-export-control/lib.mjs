@@ -5,7 +5,7 @@
 // ECCN, never guesses which country was meant, and never reports "no licence
 // required" without saying what that answer does not cover.
 
-import { COUNTRIES, ECCNS, SOURCE_EDITION } from "./data.mjs";
+import { COUNTRIES, ECCNS, FOOTNOTES, SOURCE_EDITION } from "./data.mjs";
 
 export { SOURCE_EDITION };
 
@@ -50,8 +50,23 @@ const ALIASES = {
   "ivory coast": "Cote d'Ivoire",
   "cape verde": "Cabo Verde",
   "swaziland": "Eswatini",
-  "turkiye": "Turkey",
+  // The chart says Türkiye, which normalises to "turkiye" and needs no alias.
+  // The entry here used to point the other way, at a spelling the chart does
+  // not carry, so it never resolved anything.
+  "turkey": "Türkiye",
+  "macao": "Macau",
 };
+
+/**
+ * Footnote numbers plus the text they stand for.
+ *
+ * The numbers alone were what the chart row carried, and a bare `[2, 3]` is
+ * unreadable: footnote 6 is the Russia and Belarus sanctions and footnote 8 is
+ * Crimea, so these are conditions that change the answer, not citations.
+ */
+function footnotesOf(row) {
+  return (row.f ?? []).map((n) => ({ number: n, text: FOOTNOTES[n] ?? null }));
+}
 
 /**
  * The United States is not a row on the chart, because the chart lists export
@@ -110,29 +125,34 @@ export function resolveCountry(raw) {
 }
 
 /**
- * An entry with no controls in the data is a question this server cannot
- * answer, and it must never come back as `licenseRequired: false`.
+ * An entry the country chart does not decide, which must never come back as
+ * `licenseRequired: false`.
  *
- * Two different things produce one: an entry whose licence requirements are
- * written as prose rather than as a country-chart table (0A983 reads "a license
- * is required for ALL destinations", which is the opposite of no licence), and
- * an entry that is a pointer to the ITAR and carries no EAR requirement at all
- * (0A002). Both are real, controlled items. Neither can be answered from an
- * empty control list, and `false` computed from an empty array is not a finding
- * about the regulation, it is the absence of one.
+ * Two kinds reach here. An entry whose controls exist but name no chart column:
+ * 0A983 reads "a license is required for ALL destinations, regardless of
+ * end-use", and reporting that the chart requires nothing would be the exact
+ * inversion of it. And an entry with no licence requirements of its own, which
+ * is a pointer to another authority, usually the ITAR. A State Department
+ * licence is not the absence of a requirement either.
+ *
+ * `licenseRequired` is deliberately absent rather than false. The field means
+ * "the chart decided and the answer was no", and neither of these is that.
  */
 function indeterminateResult(eccn, entry) {
+  const controls = entry.c.map(([scope, requirement]) => ({ scope, requirement }));
   return {
     status: "indeterminate",
     eccn,
     title: entry.t,
     reasons: (entry.r ?? []).map((r) => ({ code: r, name: REASON_CODES[r] ?? null })),
-    message:
-      `${eccn} carries no country-chart control in the ${SOURCE_EDITION} data, so the chart cannot ` +
-      "answer for it. Do not read this as no licence required: entries in this state include items " +
-      "requiring a licence to all destinations, and items that are subject to the ITAR rather than " +
-      "the EAR. Read the entry directly in 15 CFR part 774, Supplement No. 1, and check the title " +
-      "returned here, which often states the requirement.",
+    controlsNotOnChart: controls,
+    message: controls.length
+      ? `${eccn} is controlled, but by requirements the Commerce Country Chart does not decide, so the ` +
+        "chart cannot answer for it. The requirement text is returned verbatim in `controlsNotOnChart` " +
+        "and often requires a licence to every destination. Read it before treating anything as cleared."
+      : `${eccn} carries no licence requirements of its own in the ${SOURCE_EDITION} Control List. Entries ` +
+        "in this state point at another authority, usually the ITAR, and the heading returned here names " +
+        "it. This is not a finding that no licence is required; see 22 CFR parts 120 through 130.",
     notCovered: NOT_COVERED,
   };
 }
@@ -196,7 +216,10 @@ export function checkLicense(eccnRaw, countryRaw) {
     };
   }
 
-  if (!entry.c.length) return indeterminateResult(eccn, entry);
+  // Nothing on this entry is decided by the chart, so the chart has no verdict
+  // to give. An entry with *some* chart control is answered normally, with the
+  // off-chart ones surfaced alongside.
+  if (!entry.c.some((c) => c[2])) return indeterminateResult(eccn, entry);
 
   const marks = new Set(row.c);
   const triggered = [];
@@ -218,7 +241,7 @@ export function checkLicense(eccnRaw, countryRaw) {
     triggeredBy: triggered,
     controlsNotOnChart: notOnChart,
     countryColumns: row.c,
-    footnotes: row.f ?? [],
+    footnotes: footnotesOf(row),
     sourceEdition: SOURCE_EDITION,
     notCovered: NOT_COVERED,
   };
@@ -229,7 +252,14 @@ export function lookupEccn(eccnRaw) {
   if (!eccn) return { status: "invalid_eccn", message: `"${String(eccnRaw ?? "")}" is not a well-formed ECCN.` };
   const e = ECCNS[eccn];
   if (!e) return { status: "unknown_eccn", eccn, message: `${eccn} is not in the ${SOURCE_EDITION} Commerce Control List.` };
-  if (!e.c.length) return { ...indeterminateResult(eccn, e), chartDetermined: false, sourceEdition: SOURCE_EDITION };
+  if (!e.c.some((c) => c[2])) {
+    return {
+      ...indeterminateResult(eccn, e),
+      controls: e.c.map(([scope, requirement, column]) => ({ scope, requirement, column })),
+      chartDetermined: false,
+      sourceEdition: SOURCE_EDITION,
+    };
+  }
   return {
     status: "ok",
     eccn,
@@ -258,7 +288,7 @@ export function lookupCountry(countryRaw) {
     status: "ok",
     country,
     columns: row.c.map((c) => ({ column: c, reason: c.slice(0, 2), reasonName: REASON_CODES[c.slice(0, 2)] ?? null })),
-    footnotes: row.f ?? [],
+    footnotes: footnotesOf(row),
     sourceEdition: SOURCE_EDITION,
   };
 }

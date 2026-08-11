@@ -7,8 +7,8 @@ It reads two published tables, both US federal regulation and therefore public
 domain:
 
 - **Commerce Country Chart**, 15 CFR part 738, Supplement No. 1. 200 destinations
-  by 16 control columns.
-- **Commerce Control List**, 15 CFR part 774, Supplement No. 1. 636 ECCNs with
+  by 16 control columns, with the ten chart footnotes.
+- **Commerce Control List**, 15 CFR part 774, Supplement No. 1. 637 ECCNs with
   their reasons for control and the chart column each one maps to.
 
 Both are embedded in the package from the **2026-01-01** edition. There is no
@@ -42,6 +42,10 @@ check_export_license { eccn: "3A001", country: "Japan" }
 check_export_license { eccn: "3A001", country: "Canada" }
   -> licenseRequired: false, plus the RS controls on that entry that the
      chart does not decide
+
+check_export_license { eccn: "0A983", country: "France" }
+  -> indeterminate, with "a license is required for ALL destinations,
+     regardless of end-use" returned verbatim
 ```
 
 ## What this does not do, which matters more than what it does
@@ -66,6 +70,15 @@ answer carries a `notCovered` list, because all of the following still apply:
 **Four destinations never get a chart answer.** Cuba, Iran, North Korea and Syria
 return `embargoed` with a referral to part 746, because the chart does not govern
 them and reading their row as permission would be badly wrong.
+
+**Entries the chart does not decide return `indeterminate`, not `false`.** Some
+ECCNs carry their requirement in the entry itself rather than in a chart column,
+and it is frequently the strongest one in the part: 0A983, implements of torture,
+reads *a license is required for ALL destinations, regardless of end-use*. Others
+are pointers to the ITAR with no EAR requirement at all. Both return the
+requirement text verbatim and no verdict, because `licenseRequired: false` on
+either would be the inverse of the answer. 47 of the 637 entries are in the
+second group; the first is answered from the text.
 
 **Ambiguous country names are not guessed.** "Congo" returns both Congos and asks
 you to choose. So does anything else matching more than one row.
@@ -99,19 +112,41 @@ deliberately does not phone home.
 `data.mjs` is generated from eCFR, which is keyless and public:
 
 ```bash
-curl "https://www.ecfr.gov/api/versioner/v1/full/<date>/title-15.xml?part=738" -o chart.xml
-curl "https://www.ecfr.gov/api/versioner/v1/full/<date>/title-15.xml?part=774" -o ccl.xml
+node scripts/gen-export-control.mjs                  # today's edition
+node scripts/gen-export-control.mjs --date=2026-01-01
 ```
 
-The country chart is one table keyed by a 16-column header (`CB 1` through
-`AT 2`); the Control List is one entry per `<FP-2><B>` heading whose text starts
-with an ECCN, each carrying a `Reason for Control:` line and a two-column table
-mapping a control to its chart column.
+Read that script before changing it. The first version of this data came from a
+generator that was never committed, and it shipped seven defects that were
+invisible in the output and green in the test suite: entries whose requirement
+is written as prose lost it and then cleared every destination, table rows with
+a trailing empty cell were dropped, the reason line was read past its end so one
+entry carried 341 reason codes, XML entities were never decoded so Türkiye could
+not be looked up by any spelling, and every string was cut at 220 characters
+mid-word.
 
-Two shapes in that source will silently lose data if a rewrite misses them.
-Some control tables merge both cells into one `colspan="2"` cell, and the four
-embargoed destinations carry a referral sentence instead of X marks rather than
-appearing as an empty row.
+So the invariants at the foot of that script matter more than its parsing does.
+Each one is a defect that shipped, and they fail the build rather than writing a
+table that looks complete. The load-bearing one: **an entry with a licence
+section and no control parsed out of it is a parse failure, not an entry without
+controls.** That single assertion catches most of the above.
+
+The shapes in the source that will silently lose data if a rewrite misses them:
+
+| Shape | Where |
+|---|---|
+| Control table with both cells merged into one `colspan="2"` cell | 1C350 |
+| Control table row with a trailing empty third cell | 6D201 |
+| Empty chart cell, with the requirement stated in the scope cell | 1E355 |
+| `Control(s):` as prose in an `FP-1`, with or without the `<I>` label | 0A981, 0A983 |
+| `Controls:`, spelled without the parenthetical | 5D980 |
+| `Control(s)` as a bare heading followed by `<P>` paragraphs | 1C355 |
+| A control paragraph sitting beside a captured table | 1C350's CW rule |
+| Entry heading split across several `<B>` tags to italicise a term | 3D006 |
+| `Reason for Control` written in the plural, or wrapped in an `FP-2` | 0A919, 2B910 |
+| An entry with no `License Requirements` header, going straight to the reason line | 3A001 |
+| Referral sentence in place of X marks, rather than an empty row | Cuba, Iran, North Korea, Syria |
+| Footnote text as a row of the destinations table | the ten chart footnotes |
 
 ## License
 
