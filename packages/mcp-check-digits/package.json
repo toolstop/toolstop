@@ -1,6 +1,6 @@
 {
   "name": "@toolstop/check-digits",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "mcpName": "dev.toolstop/check-digits",
   "description": "MCP server that catches mistyped barcodes, ISBNs, VINs and other public structured identifiers before a bad one causes a rejected listing, a bounced claim or a corrupted record.",
   "type": "module",

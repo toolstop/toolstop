@@ -179,6 +179,22 @@ for (const { package: pkg, server } of servers) {
     );
   });
 
+  // There is deliberately no submit_feedback tool. A sink for one would mean
+  // per-server state and an upstream, and a free-text argument is the one field
+  // no `classify` can bound: agents write prose that interpolates their user's
+  // data, which is how a real IBAN ends up in telemetry. The channel is a human
+  // opening an issue instead, and that only works if the agent can name the URL
+  // when it hits a wall. Derived from server.json so there is one spelling of it.
+  test(`${pkg}: instructions name the issue tracker`, () => {
+    const repo = read("server.json").repository?.url;
+    assert.ok(repo, "server.json declares no repository, so a problem report has nowhere to go");
+    const issues = `${repo.replace(/\.git$/, "").replace(/\/$/, "")}/issues`;
+    assert.ok(
+      server.instructions?.includes(issues),
+      `instructions never mention ${issues}, so an agent that finds a wrong answer or a missing format cannot route it to a human. There is no feedback tool by design; this URL is the whole channel.`,
+    );
+  });
+
   test(`${pkg}: server.json is publishable to the MCP registry`, () => {
     const serverJson = read("server.json");
     const pkgJson = read("package.json");

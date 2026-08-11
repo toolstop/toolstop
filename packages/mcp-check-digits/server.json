@@ -3,7 +3,7 @@
   "name": "dev.toolstop/check-digits",
   "title": "Check Digits",
   "description": "Catch a mistyped barcode, ISBN, VIN, NPI or LEI before a bad identifier corrupts a record.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "websiteUrl": "https://check-digits.toolstop.dev",
   "repository": {
     "url": "https://github.com/toolstop/toolstop",
@@ -19,7 +19,7 @@
     {
       "registryType": "npm",
       "identifier": "@toolstop/check-digits",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "transport": {
         "type": "stdio"
       }

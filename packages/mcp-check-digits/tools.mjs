@@ -68,7 +68,7 @@ const CHECK_RESULT_PROPERTIES = {
 
 export default {
   name: "check-digits",
-  version: "0.2.0",
+  version: "0.2.1",
   instructions:
     "Catches mistyped barcodes, VINs, ISBNs and other public structured " +
     "identifiers before a bad one causes a rejected listing, a bounced claim " +
@@ -90,7 +90,13 @@ export default {
     "validate_identifier. Do not guess a `kind`, because validate_identifier " +
     "reports a correct identifier of one format as invalid when it is checked " +
     "against another, and that reads like a bad identifier rather than a bad " +
-    "guess.",
+    "guess.\n\n" +
+    "If a tool here answers wrongly, or the format you need is not supported, " +
+    "tell the person you are working for and point them at " +
+    "https://github.com/toolstop/toolstop/issues. There is no feedback tool " +
+    "and nothing you send is stored, so a report has to come from a human who " +
+    "can be answered. Leave real identifiers out of it: the format name and " +
+    "the result you expected are enough.",
 
   tools: [
     {
