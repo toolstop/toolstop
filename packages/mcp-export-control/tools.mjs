@@ -12,6 +12,7 @@ import { checkLicense, lookupEccn, lookupCountry, REASON_CODES, SOURCE_EDITION }
 const STATUSES = [
   "ok",
   "embargoed",
+  "indeterminate",
   "invalid_eccn",
   "unknown_eccn",
   "unknown_country",
@@ -24,13 +25,15 @@ const STATUS_PROPERTY = {
   enum: STATUSES,
   description:
     "Outcome of the lookup. Only `ok` carries an answer. `embargoed` means the " +
-    "chart does not govern the destination. `ambiguous_country` means the name " +
-    "matched more than one row and you must ask which was meant.",
+    "chart does not govern the destination. `indeterminate` means the entry has " +
+    "no country-chart control in this data and the chart cannot answer for it, " +
+    "which is not the same as no licence being required. `ambiguous_country` " +
+    "means the name matched more than one row and you must ask which was meant.",
 };
 
 export default {
   name: "export-control",
-  version: "0.1.0",
+  version: "0.2.0",
   instructions:
     "Answers one question: does the Commerce Country Chart require an export " +
     "licence for a given ECCN to a given destination? It reads two published " +
@@ -56,6 +59,13 @@ export default {
     "carries. Country names must match the chart's own spelling; both tools " +
     "return `candidates` rather than choosing when a name is ambiguous, and " +
     "you should put that choice to a human rather than picking.\n\n" +
+    "Some entries write their licence requirement as prose rather than as a " +
+    "chart column, and some are pointers to the ITAR carrying no EAR " +
+    "requirement at all. Those return `indeterminate` rather than an answer, " +
+    "because a chart verdict computed from an entry with no chart controls " +
+    "would read as `licenseRequired: false` for items that in fact require a " +
+    "licence to every destination. Treat `indeterminate` as unanswered and go " +
+    "to the regulation.\n\n" +
     "A result of `licenseRequired: false` means only that the country chart " +
     "does not require one for that ECCN. It is not permission to export. The " +
     "`notCovered` array on every answer lists what still applies, including " +
@@ -80,8 +90,10 @@ export default {
         "the chart at all. A `false` result means the chart alone does not " +
         "require a licence; it is not clearance to export, and it says nothing " +
         "about the Entity List, embargoes, end-use controls, or whether the " +
-        "ECCN is the right one. This tool cannot classify an item into an " +
-        "ECCN and will not try.",
+        "ECCN is the right one. Entries whose requirement is not written as a " +
+        "chart column return `indeterminate` instead of a verdict, and that is " +
+        "an unanswered question rather than a negative answer. This tool cannot " +
+        "classify an item into an ECCN and will not try.",
       annotations: { readOnlyHint: true, openWorldHint: false },
       inputSchema: {
         type: "object",
@@ -132,6 +144,8 @@ export default {
             description: "What this answer does not address. Always present on an answered lookup.",
             items: { type: "string" },
           },
+          title: { type: "string", description: "The Control List entry heading, on an indeterminate result." },
+          message: { type: "string", description: "Why no verdict was returned, when status is not `ok`." },
         },
         required: ["status"],
       },
@@ -139,6 +153,12 @@ export default {
         {
           args: { eccn: "3A001", country: "Japan" },
           expect: { status: "ok", eccn: "3A001", country: "Japan", licenseRequired: true },
+        },
+        {
+          // The requirement is "a license is required for ALL destinations",
+          // written as prose. An empty control list must not become `false`.
+          args: { eccn: "0A983", country: "France" },
+          expect: { status: "indeterminate", eccn: "0A983" },
         },
         {
           args: { eccn: "3A001", country: "Canada" },
@@ -170,7 +190,8 @@ export default {
         "caveats before relying on a licence answer, since a control often " +
         "applies to only some sub-paragraphs of an entry. Some entries are not " +
         "decided by the country chart at all, and those return " +
-        "`chartDetermined: false` with the requirement text instead. Knowing an " +
+        "`chartDetermined: false` with the requirement text instead, or " +
+        "`indeterminate` when the entry carries no chart control at all. Knowing an " +
         "entry's reasons for control does not tell you whether a licence is " +
         "required for a destination; pass the ECCN to check_export_license for " +
         "that. This tool cannot tell you whether an item falls under this ECCN.",
@@ -214,6 +235,10 @@ export default {
         {
           args: { eccn: "0A997" },   // well-formed, absent from the Control List
           expect: { status: "unknown_eccn" },
+        },
+        {
+          args: { eccn: "0A002" },   // present, but a pointer to the ITAR
+          expect: { status: "indeterminate", chartDetermined: false },
         },
       ],
       handler: ({ eccn }) => lookupEccn(eccn),
