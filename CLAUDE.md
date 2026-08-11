@@ -122,6 +122,21 @@ another's input, say so in both places and make sure the values actually match:
 `identify_format` used to return `EAN-13` where `validate_identifier` accepts
 only `gtin`, so the documented handoff did not work.
 
+**`instructions` also names the issue tracker, and that is the entire feedback
+channel.** There is no `submit_feedback` tool and there should not be one. A sink
+for it is per-server state and an upstream, so `openWorldHint: false` stops being
+true and it becomes the first tool in the fleet with `readOnlyHint: false`. Worse,
+a free-text argument is the one field no `classify` can bound: agents write prose
+that interpolates their user's data, which is exactly how a real IBAN reached
+Analytics Engine through `result.reason` above. The signal it would collect is
+already in telemetry as outcome codes per tool per session, unbiased, and a tool
+nobody calls is still paid for in every `tools/list` on every session.
+
+So the agent tells its human and names the URL instead, and the human can be
+answered. `conventions.test.mjs` derives the expected URL from `server.json`'s
+`repository.url` rather than hardcoding it, so a new server inherits the check
+and there is one spelling of the address per package.
+
 **A shared property block is worth writing once and pointing at.** Spreading
 `CHECK_RESULT_PROPERTIES` into a nested array schema cost about 1.1k characters
 of every `tools/list` response to repeat what the model had already read one
