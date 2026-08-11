@@ -1,0 +1,42 @@
+{
+  "name": "@toolstop/prop65",
+  "version": "0.1.0",
+  "mcpName": "dev.toolstop/prop65",
+  "description": "MCP server for California Proposition 65: whether a chemical is listed, its toxicity endpoint, safe-harbour level, listing date, and whether it was later delisted.",
+  "type": "module",
+  "bin": {
+    "mcp-prop65": "dist/index.mjs"
+  },
+  "main": "./dist/lib.mjs",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "mcp-server",
+    "proposition-65",
+    "prop65",
+    "oehha",
+    "california",
+    "chemical-compliance",
+    "cas-number",
+    "product-safety",
+    "warning-label"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test.mjs",
+    "prepack": "node ../../scripts/prepack.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/toolstop/toolstop.git",
+    "directory": "packages/mcp-prop65"
+  },
+  "homepage": "https://prop65.toolstop.dev"
+}

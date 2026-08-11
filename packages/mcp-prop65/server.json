@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "dev.toolstop/prop65",
+  "title": "Proposition 65",
+  "description": "Is a chemical on California's Proposition 65 list, and does it need a warning?",
+  "version": "0.1.0",
+  "websiteUrl": "https://prop65.toolstop.dev",
+  "repository": {
+    "url": "https://github.com/toolstop/toolstop",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://prop65.toolstop.dev"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@toolstop/prop65",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
