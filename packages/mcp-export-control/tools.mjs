@@ -33,7 +33,7 @@ const STATUS_PROPERTY = {
 
 export default {
   name: "export-control",
-  version: "0.3.0",
+  version: "0.3.1",
   instructions:
     "Answers one question: does the Commerce Country Chart require an export " +
     "licence for a given ECCN to a given destination? It reads two published " +
