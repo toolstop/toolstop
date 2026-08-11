@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "dev.toolstop/export-control",
+  "title": "Export Control",
+  "description": "Does the US Commerce Country Chart require an export licence for an ECCN to a destination?",
+  "version": "0.1.0",
+  "websiteUrl": "https://export-control.toolstop.dev",
+  "repository": {
+    "url": "https://github.com/toolstop/toolstop",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://export-control.toolstop.dev"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@toolstop/export-control",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

@@ -13,17 +13,30 @@
 //
 // Runs from the package directory as an npm `prepack` hook.
 
-import { mkdirSync, copyFileSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, copyFileSync, readFileSync, writeFileSync, rmSync, readdirSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
 const pkgDir = process.cwd();
 const dist = resolve(pkgDir, "dist");
 const shared = resolve(pkgDir, "..", "_shared");
 
-// Files that make up a server. worker.mjs is the Cloudflare entrypoint and has
-// no meaning off-Worker, so it stays out of the tarball.
-const OWN = ["index.mjs", "tools.mjs", "lib.mjs"];
+// Files that make up a server, discovered rather than listed. A server that
+// splits its data or logic across extra modules ships them without editing
+// this file, which is the same rule discover.mjs follows for packages.
+//
+// worker.mjs is the Cloudflare entrypoint and has no meaning off-Worker, and
+// tests are not part of the artifact, so both stay out of the tarball.
+const OWN = readdirSync(pkgDir)
+  .filter((f) => f.endsWith(".mjs") && f !== "worker.mjs" && !f.endsWith("test.mjs"))
+  .sort();
 const SHARED = ["stdio.mjs", "http.mjs", "telemetry.mjs"];
+
+for (const required of ["index.mjs", "tools.mjs"]) {
+  if (!OWN.includes(required)) {
+    console.error(`prepack: ${basename(pkgDir)} has no ${required}.`);
+    process.exit(1);
+  }
+}
 
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(resolve(dist, "_shared"), { recursive: true });
