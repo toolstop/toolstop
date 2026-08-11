@@ -231,6 +231,24 @@ the shared suites and the tarball check itself and reports them in the PR body.
 The empty checks list on those PRs is expected, not a failure. The alternative
 is a stored PAT, which is a standing credential for a weekly job.
 
+**The org forbids Actions from opening PRs at all, so the job raises an issue
+instead.** "Allow GitHub Actions to create and approve pull requests" is off on
+the `toolstop` org, which is the sensible default, and a repository cannot
+override it: setting `can_approve_pull_request_reviews` on the repo returns 409
+while the org policy stands. Changing it needs `admin:org`, and it is one
+toggle:
+
+```bash
+gh api -X PUT /orgs/toolstop/actions/permissions/workflow \
+  -f default_workflow_permissions=read -F can_approve_pull_request_reviews=true
+```
+
+Until then the refresh pushes its branch, opens an issue labelled
+`data-refresh` linking the compare view, and **exits green**. That last part is
+the point. A red run has to keep meaning "the generator could not read its
+source", because that is the alarm worth waking up for. A settings toggle and a
+restructured Federal Register entry must not produce the same signal.
+
 **Servers are zero-dependency.** No MCP SDK, no zod. Stateless
 request/response MCP makes hand-rolled dispatch small enough that dropping both
 is worth it: faster cold starts, and no supply chain.

@@ -23,9 +23,19 @@ on:
 # workflows on a PR that a token opened, to stop a workflow triggering itself.
 # So this job runs the same checks CI would and reports them in the PR body.
 # Read that, not the empty checks list.
+#
+# `issues: write` is the fallback, and it is load-bearing rather than defensive.
+# The `toolstop` org sets "Allow GitHub Actions to create and approve pull
+# requests" to off, which is the sensible org default and cannot be overridden
+# per repository. Letting that fail the job would wreck the one signal this
+# workflow exists to give: a red run means the generator could not read its
+# source. A policy toggle and a restructured federal register entry must not
+# look the same. So the branch is pushed either way and an issue carries the
+# link when the PR cannot be opened.
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 jobs:
   discover:
@@ -118,10 +128,32 @@ jobs:
           # one rather than something to rebase onto.
           git push --force origin "$BRANCH"
 
-          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
-            gh pr create --head "$BRANCH" \
-              --title "Refresh $PKG data to the current edition, $VERSION" \
-              --body-file /tmp/pr-body.md
-          else
+          TITLE="Refresh $PKG data to the current edition, $VERSION"
+
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
             echo "::notice::updated the open PR for $BRANCH"
+            exit 0
+          fi
+
+          if gh pr create --head "$BRANCH" --title "$TITLE" --body-file /tmp/pr-body.md; then
+            exit 0
+          fi
+
+          # Blocked by the org policy on Actions opening PRs. The work is on the
+          # branch regardless, so raise an issue pointing at it rather than
+          # failing and making a settings toggle look like a parse failure.
+          echo "::warning::could not open a PR; raising an issue instead"
+          {
+            printf 'The refresh ran and its branch is pushed, but this workflow cannot open the pull request: the org sets **Allow GitHub Actions to create and approve pull requests** to off.\n\n'
+            printf 'Open it here: https://github.com/%s/compare/main...%s?expand=1\n\n' "$GITHUB_REPOSITORY" "$BRANCH"
+            printf -- '---\n\n'
+            cat /tmp/pr-body.md
+          } > /tmp/issue-body.md
+
+          EXISTING="$(gh issue list --state open --label data-refresh --search "$PKG in:title" --json number --jq '.[0].number')"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file /tmp/issue-body.md
+          else
+            gh label create data-refresh --description "Embedded data is behind its source" --color 0E8A16 2>/dev/null || true
+            gh issue create --title "$TITLE" --label data-refresh --body-file /tmp/issue-body.md
           fi
