@@ -112,9 +112,19 @@ deliberately does not phone home.
 `data.mjs` is generated from eCFR, which is keyless and public:
 
 ```bash
-node scripts/gen-export-control.mjs                  # today's edition
+node scripts/gen-export-control.mjs                  # the current edition
 node scripts/gen-export-control.mjs --date=2026-01-01
 ```
+
+With no `--date` it asks eCFR which edition title 15 is currently issued at,
+rather than assuming today, because `SOURCE_EDITION` is quoted back to callers
+as what the data is current to.
+
+**This runs weekly on its own**, in `.github/workflows/refresh-data.yml`, and
+opens a PR when the tables move. The CFR changes by Federal Register amendment
+and a table embedded in a package is correct only on the day it ships: this one
+was seven months stale inside a single release, with 9A012 split so that NS
+Column 1 no longer covers `.a.1`.
 
 Read that script before changing it. The first version of this data came from a
 generator that was never committed, and it shipped seven defects that were

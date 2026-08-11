@@ -193,7 +193,7 @@ the data and could not see any of it, and the one test that would have caught
 the reason-code corruption checked a single hand-picked entry that happened to
 be clean.
 
-Two rules follow, and they are cheap:
+Three rules follow, and they are cheap:
 
 - **The generator asserts before it writes.** `scripts/gen-export-control.mjs`
   fails the build on an entry with a licence section and no control parsed out
@@ -203,6 +203,33 @@ Two rules follow, and they are cheap:
 - **Data tests iterate the whole table.** Over all 637 entries, not one example.
   The cost is milliseconds and it is the only thing that finds the twentieth
   malformed entry.
+- **The generator is named `scripts/gen-<name>.mjs` and runs on a schedule.**
+  `refresh-data.yml` discovers generators by that filename, exactly as
+  `discover.mjs` discovers servers by directory, so a second data-bearing server
+  is covered by writing its generator and needs no workflow edit. It regenerates
+  weekly and opens a PR when the tables move, with the version already bumped,
+  because a regenerated table that never publishes is a fix nobody receives.
+
+That schedule is not housekeeping. `export-control` shipped the 2026-01-01
+edition and was seven months stale inside one release: 23 entries had been
+amended, and 9A012 had been split so NS Column 1 no longer covers `.a.1`. The
+server was reporting the superseded scope with no way to notice.
+
+Two things about that workflow that look like details:
+
+**`SOURCE_EDITION` is the title's `latest_issue_date`, not the date the
+generator ran.** It is quoted back to callers as what the data is current to and
+every tool description cites it, so the run date would be a false claim. It also
+makes the output stable: labelling with today produces a diff every week, and
+the refresh could not tell an amendment from the calendar. `data-diff.mjs`
+ignores the edition string for the same reason, since upstream reissues the
+whole title whenever any part of it changes.
+
+**A PR opened with `GITHUB_TOKEN` does not run workflows.** GitHub blocks that
+to stop a workflow triggering itself, so the refresh job runs the package tests,
+the shared suites and the tarball check itself and reports them in the PR body.
+The empty checks list on those PRs is expected, not a failure. The alternative
+is a stored PAT, which is a standing credential for a weekly job.
 
 **Servers are zero-dependency.** No MCP SDK, no zod. Stateless
 request/response MCP makes hand-rolled dispatch small enough that dropping both
