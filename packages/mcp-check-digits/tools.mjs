@@ -68,7 +68,7 @@ const CHECK_RESULT_PROPERTIES = {
 
 export default {
   name: "check-digits",
-  version: "0.2.1",
+  version: "0.2.2",
   instructions:
     "Catches mistyped barcodes, VINs, ISBNs and other public structured " +
     "identifiers before a bad one causes a rejected listing, a bounced claim " +

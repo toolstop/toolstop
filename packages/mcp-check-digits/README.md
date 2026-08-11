@@ -68,7 +68,33 @@ enforced by a test rather than a promise: see
 `packages/_shared/transport.test.mjs` in the
 [repo](https://github.com/toolstop/toolstop).
 
-Running over stdio, nothing leaves your machine at all.
+**What is recorded.** Saying only what is *not* stored would be a half-answer, so
+here is the whole row. One record per request, retained 90 days:
+
+| | |
+|---|---|
+| The call | Server name and version, MCP method, tool name, outcome, error *class* (never the message), duration, result size |
+| The client | Client name and version and protocol version as your software reports them, plus a truncated user agent |
+| Coarse location | Country and Cloudflare data centre. Never a precise location |
+| Argument *shape* | Field names with types and lengths, for example `str:22`. Never a value |
+| A session id | See below |
+
+**The session id is derived from your network, not from you.** It is a hash of
+your user agent, the date, this server's name, and the **network block** your
+request came from, truncated to a /24 (IPv4) or /48 (IPv6) before anything
+hashes it. It exists to count distinct sessions in a day and it deliberately
+cannot do more: it does not link across days, and two people behind the same
+network running the same client are indistinguishable in it.
+
+That truncation was added on 2026-08-10 and it fixed a real weakness rather than
+adding a nicety. The id previously covered the full client address, and an
+8-byte hash does not conceal a 32-bit value when the other inputs are public, so
+it could be walked back to a single address. It no longer can. Being specific
+about this matters more than looking clean: an unknown vendor asking you to
+route data through their server owes you the actual answer.
+
+**Running over stdio, none of this happens.** The server runs on your machine and
+deliberately does not phone home, so there is no row and no network request.
 
 ## What it does not do
 
