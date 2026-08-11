@@ -1,0 +1,42 @@
+{
+  "name": "@toolstop/export-control",
+  "version": "0.1.0",
+  "mcpName": "dev.toolstop/export-control",
+  "description": "MCP server that answers whether the US Commerce Country Chart requires an export licence for a given ECCN to a given destination, from the published CFR tables.",
+  "type": "module",
+  "bin": {
+    "mcp-export-control": "dist/index.mjs"
+  },
+  "main": "./dist/lib.mjs",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "mcp-server",
+    "export-control",
+    "eccn",
+    "ear",
+    "commerce-country-chart",
+    "commerce-control-list",
+    "trade-compliance",
+    "bis",
+    "cfr"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test.mjs",
+    "prepack": "node ../../scripts/prepack.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/toolstop/toolstop.git",
+    "directory": "packages/mcp-export-control"
+  },
+  "homepage": "https://export-control.toolstop.dev"
+}
