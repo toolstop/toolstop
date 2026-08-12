@@ -33,7 +33,7 @@ const STATUS_PROPERTY = {
 
 export default {
   name: "export-control",
-  version: "0.3.1",
+  version: "0.4.0",
   instructions:
     "Answers one question: does the Commerce Country Chart require an export " +
     "licence for a given ECCN to a given destination? It reads two published " +
@@ -72,6 +72,16 @@ export default {
     "`notCovered` array on every answer lists what still applies, including " +
     "the Entity List and other end-user controls, the part 746 embargoes, and " +
     "licence exceptions that may change the answer in the other direction.\n\n" +
+    "**Report the citation, not just the verdict.** This server tells you what " +
+    "the tables say; it is not an authority on what you may do, and the " +
+    "difference matters because the exporter carries the liability either way. " +
+    "Every answer returns `checked`, which names each chart cell that was read " +
+    "and whether it was marked, and `sourceEdition`, which says how current the " +
+    "tables are. A negative answer is the one a caller acts on by shipping, so " +
+    "it is the one that most needs its evidence passed on rather than " +
+    "summarised. Where a row carries `footnotes`, say so: this server does not " +
+    "apply them, and footnote 6 alone covers the Russia and Belarus " +
+    "sanctions.\n\n" +
     "If a lookup here disagrees with the current regulation, the data is a " +
     "snapshot and the regulation is the authority. Report it at " +
     "https://github.com/toolstop/toolstop/issues.",
@@ -94,7 +104,15 @@ export default {
         "ECCN is the right one. An entry the chart does not decide returns " +
         "`indeterminate` with its requirement text instead of a verdict, which " +
         "is an unanswered question rather than a negative answer. This tool " +
-        "cannot classify an item into an ECCN and will not try.",
+        "cannot classify an item into an ECCN and will not try.\n\n" +
+        "Every verdict carries its own evidence and you should report it " +
+        "rather than the boolean alone. `checked` lists each chart cell that " +
+        "was read and what it held, so a negative answer can be verified " +
+        "against 15 CFR part 738 Supplement No. 1 without trusting this " +
+        "server; `footnotes` carries row conditions this tool does not apply " +
+        "and which can change the answer; `sourceEdition` says which CFR " +
+        "edition the tables came from, and a snapshot older than the current " +
+        "regulation gives a stale answer that still reads as confident.",
       annotations: { readOnlyHint: true, openWorldHint: false },
       inputSchema: {
         type: "object",
@@ -130,10 +148,38 @@ export default {
             description: "Each control whose chart column is marked for this destination, with its scope caveat.",
             items: { type: "object" },
           },
+          checked: {
+            type: "array",
+            description:
+              "Every chart-determined control on the entry, each with the column read, its reason code, " +
+              "the scope it applies to, and whether that column is marked for this destination. This is " +
+              "the citation for the verdict and it is the only way to check a `licenseRequired: false`, " +
+              "which otherwise arrives as a bare boolean. Verify it against 15 CFR part 738 Supplement " +
+              "No. 1 before relying on a negative answer.",
+            items: { type: "object" },
+          },
           controlsNotOnChart: {
             type: "array",
             description: "Controls on this entry that the chart does not decide, with the requirement text verbatim.",
             items: { type: "object" },
+          },
+          countryColumns: {
+            type: "array",
+            description: "Every control column marked for this destination on the chart row, whether or not it bears on this ECCN.",
+            items: { type: "string" },
+          },
+          footnotes: {
+            type: "array",
+            description:
+              "Footnotes on this chart row, each with its number and text. **They can change the answer " +
+              "and this tool does not apply them.** Footnote 6 is the Russia and Belarus sanctions and " +
+              "footnote 8 is Crimea. A `licenseRequired: false` on a row carrying footnotes is not a " +
+              "clear result until the footnote text has been read.",
+            items: { type: "object" },
+          },
+          sourceEdition: {
+            type: "string",
+            description: "The CFR edition the tables were taken from. Present on every response, including errors. Data older than the current regulation is a stale answer, not a wrong one, and the regulation is the authority.",
           },
           candidates: {
             type: "array",
@@ -145,10 +191,10 @@ export default {
             description: "What this answer does not address. Always present on an answered lookup.",
             items: { type: "string" },
           },
-          title: { type: "string", description: "The Control List entry heading, on an indeterminate result." },
+          title: { type: "string", description: "The Control List entry heading." },
           message: { type: "string", description: "Why no verdict was returned, when status is not `ok`." },
         },
-        required: ["status"],
+        required: ["status", "sourceEdition"],
       },
       examples: [
         {

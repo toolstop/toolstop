@@ -13,6 +13,7 @@ import {
   resolveCountry,
   listCountries,
   REASON_CODES,
+  SOURCE_EDITION,
 } from "./lib.mjs";
 import { COUNTRIES, ECCNS } from "./data.mjs";
 
@@ -233,4 +234,74 @@ test("a footnote comes back with its text, not just its number", () => {
     assert.ok(f.text?.length > 20, `footnote ${f.number} has no text`);
   }
   assert.match(r.footnotes[0].text, /746\.5|746\.8/, "footnote 6 is the Russia and Belarus sanctions");
+});
+
+// --- criterion 6 rescope: a verdict must carry the evidence for itself -------
+//
+// Until 0.4.0 a negative answer was a bare `licenseRequired: false` beside an
+// empty `triggeredBy`. That is the answer a caller acts on by shipping, and it
+// was the one they could not check without reading the chart themselves. The
+// server's own history is the argument: 21 entries once lost their licence
+// requirement in parsing and answered `false` for every destination, and
+// nothing in the output looked wrong.
+
+test("a negative verdict names every chart cell it read", () => {
+  // 3A001 is NS Column 1 and AT Column 1; Canada carries neither.
+  const r = checkLicense("3A001", "Canada");
+  assert.equal(r.status, "ok");
+  assert.equal(r.licenseRequired, false);
+  assert.deepEqual(r.triggeredBy, []);
+
+  assert.ok(r.checked.length > 0, "a false verdict with no cited cells is unverifiable");
+  assert.ok(r.checked.every((c) => c.marked === false), "nothing may be marked when the verdict is false");
+  for (const c of r.checked) {
+    assert.ok(c.column, "each cited cell names its chart column");
+    assert.ok(c.reasonName, "each cited cell expands its reason code");
+  }
+});
+
+test("a positive verdict cites the unmarked cells too, not only the triggering ones", () => {
+  const r = checkLicense("3A001", "Japan");
+  assert.equal(r.licenseRequired, true);
+  assert.ok(r.triggeredBy.length > 0);
+  // `checked` is the whole grid row that was consulted, so the caller can see
+  // what was considered and rejected as well as what fired.
+  assert.ok(r.checked.length >= r.triggeredBy.length);
+  const marked = r.checked.filter((c) => c.marked).map((c) => c.column).sort();
+  assert.deepEqual(marked, r.triggeredBy.map((t) => t.column).sort());
+});
+
+test("every chart answer stamps the edition it was read from", () => {
+  for (const args of [["3A001", "Japan"], ["3A001", "Canada"], ["0A983", "France"], ["0A501", "Iran"]]) {
+    const r = checkLicense(...args);
+    assert.equal(r.sourceEdition, SOURCE_EDITION, `${args.join("/")} must say how current it is`);
+  }
+});
+
+test("even a refusal says how current the data is", () => {
+  // A caller cannot tell a stale snapshot from a wrong one without this, and
+  // "not in the Control List" is exactly the answer an old snapshot gets wrong.
+  const refusals = [
+    checkLicense("not-an-eccn", "Japan"),
+    checkLicense("0A997", "Japan"),
+    checkLicense("3A001", "Congo"),
+    checkLicense("3A001", "United States"),
+    lookupEccn("not-an-eccn"),
+    lookupEccn("0A997"),
+    lookupCountry("Nowhere"),
+  ];
+  for (const r of refusals) {
+    assert.equal(r.sourceEdition, SOURCE_EDITION, `${r.status} must carry the edition`);
+  }
+});
+
+test("a footnoted row still returns its footnotes alongside the verdict", () => {
+  // Russia carries the sanctions footnote. The tool does not apply footnotes,
+  // so a verdict on such a row is only safe if the footnote travels with it.
+  const r = checkLicense("3A001", "Russia");
+  assert.equal(r.status, "ok");
+  assert.ok(Array.isArray(r.footnotes));
+  if (r.footnotes.length) {
+    assert.ok(r.footnotes.every((f) => f.number != null && f.text), "a bare footnote number is unreadable");
+  }
 });

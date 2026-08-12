@@ -85,6 +85,7 @@ function domesticResult() {
       "A shipment within the United States is not an export and the chart does not govern it. " +
       "Note that releasing controlled technology to a foreign person inside the US is a deemed " +
       "export and is controlled separately; see 15 CFR 734.13.",
+    sourceEdition: SOURCE_EDITION,
   };
 }
 
@@ -154,6 +155,7 @@ function indeterminateResult(eccn, entry) {
         "in this state point at another authority, usually the ITAR, and the heading returned here names " +
         "it. This is not a finding that no licence is required; see 22 CFR parts 120 through 130.",
     notCovered: NOT_COVERED,
+    sourceEdition: SOURCE_EDITION,
   };
 }
 
@@ -176,6 +178,7 @@ export function checkLicense(eccnRaw, countryRaw) {
     return {
       status: "invalid_eccn",
       message: `"${String(eccnRaw ?? "")}" is not an ECCN. An ECCN is a digit, a letter A to E, then three digits, for example 3A001.`,
+      sourceEdition: SOURCE_EDITION,
     };
   }
 
@@ -185,6 +188,7 @@ export function checkLicense(eccnRaw, countryRaw) {
       status: "unknown_eccn",
       eccn,
       message: `${eccn} is not in the Commerce Control List edition of ${SOURCE_EDITION}. It may have been removed, or it may never have existed. Do not read this as "no licence required".`,
+      sourceEdition: SOURCE_EDITION,
     };
   }
 
@@ -199,6 +203,7 @@ export function checkLicense(eccnRaw, countryRaw) {
       message: resolved.candidates.length
         ? `"${String(countryRaw ?? "")}" matches more than one destination on the chart. Ask which one rather than assuming.`
         : `"${String(countryRaw ?? "")}" is not a destination on the Commerce Country Chart.`,
+      sourceEdition: SOURCE_EDITION,
     };
   }
 
@@ -213,6 +218,7 @@ export function checkLicense(eccnRaw, countryRaw) {
       referral: row.e,
       message: `${country} is a special-controls destination. The Commerce Country Chart does not answer this; ${row.e}`,
       notCovered: NOT_COVERED,
+      sourceEdition: SOURCE_EDITION,
     };
   }
 
@@ -222,11 +228,18 @@ export function checkLicense(eccnRaw, countryRaw) {
   if (!entry.c.some((c) => c[2])) return indeterminateResult(eccn, entry);
 
   const marks = new Set(row.c);
+  const checked = [];
   const triggered = [];
   const notOnChart = [];
   for (const [scope, chartText, column] of entry.c) {
     if (column) {
-      if (marks.has(column)) triggered.push({ reason: column.slice(0, 2), column, scope, reasonName: REASON_CODES[column.slice(0, 2)] ?? null });
+      const reason = column.slice(0, 2);
+      const marked = marks.has(column);
+      // Every chart-determined control is recorded with the cell that was read,
+      // marked or not. This is what makes a negative answer checkable: see
+      // `checked` below.
+      checked.push({ column, reason, reasonName: REASON_CODES[reason] ?? null, scope, marked });
+      if (marked) triggered.push({ reason, column, scope, reasonName: REASON_CODES[reason] ?? null });
     } else {
       notOnChart.push({ scope, requirement: chartText });
     }
@@ -239,6 +252,13 @@ export function checkLicense(eccnRaw, countryRaw) {
     country,
     licenseRequired: triggered.length > 0,
     triggeredBy: triggered,
+    // The evidence for the verdict, and the reason this tool reports rather
+    // than rules. `triggeredBy` justifies a `true`; until this existed a
+    // `false` arrived as a bare boolean with an empty array beside it, which is
+    // the answer a caller acts on by shipping and the one they could not check
+    // without reading the chart themselves. `checked` names every cell that was
+    // read and what it held, so both verdicts cite the same grid.
+    checked,
     controlsNotOnChart: notOnChart,
     countryColumns: row.c,
     footnotes: footnotesOf(row),
@@ -249,9 +269,9 @@ export function checkLicense(eccnRaw, countryRaw) {
 
 export function lookupEccn(eccnRaw) {
   const eccn = normalizeEccn(eccnRaw);
-  if (!eccn) return { status: "invalid_eccn", message: `"${String(eccnRaw ?? "")}" is not a well-formed ECCN.` };
+  if (!eccn) return { status: "invalid_eccn", message: `"${String(eccnRaw ?? "")}" is not a well-formed ECCN.`, sourceEdition: SOURCE_EDITION };
   const e = ECCNS[eccn];
-  if (!e) return { status: "unknown_eccn", eccn, message: `${eccn} is not in the ${SOURCE_EDITION} Commerce Control List.` };
+  if (!e) return { status: "unknown_eccn", eccn, message: `${eccn} is not in the ${SOURCE_EDITION} Commerce Control List.`, sourceEdition: SOURCE_EDITION };
   if (!e.c.some((c) => c[2])) {
     return {
       ...indeterminateResult(eccn, e),
@@ -279,6 +299,7 @@ export function lookupCountry(countryRaw) {
       status: resolved.candidates.length ? "ambiguous_country" : "unknown_country",
       candidates: resolved.candidates,
       message: `"${String(countryRaw ?? "")}" did not resolve to exactly one destination on the chart.`,
+      sourceEdition: SOURCE_EDITION,
     };
   }
   const country = resolved.match;
