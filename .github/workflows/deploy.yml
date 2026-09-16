@@ -112,6 +112,18 @@ jobs:
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
+          # The registry is checked on its own, not inferred from npm. The two
+          # publishes are not atomic: 0.4.1 reached npm and the registry step
+          # then failed, and a rerun gated on the npm check skipped the registry
+          # for good. Ask the registry what it has, so a half-done release
+          # finishes on the next run instead of needing a version bump.
+          REG_NAME="$(node -p 'require("./server.json").name')"
+          if [ "$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=$REG_NAME&version=$VERSION" | jq '.servers | length')" != "0" ]; then
+            echo "$REG_NAME@$VERSION is already in the MCP registry"
+            echo "register=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "register=true" >> "$GITHUB_OUTPUT"
+          fi
 
       # The deploy job above proved the Worker serves correctly, which says
       # nothing about the tarball: they share tools.mjs but not a transport, and
@@ -137,7 +149,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install mcp-publisher
-        if: steps.check.outputs.publish == 'true'
+        if: steps.check.outputs.register == 'true'
         run: |
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
             | tar xz mcp-publisher
@@ -146,12 +158,22 @@ jobs:
       # DNS auth, not github-oidc, because the namespace is dev.toolstop and OIDC
       # can only assert io.github.<user>. See CLAUDE.md for the trade.
       - name: Authenticate to the MCP registry
-        if: steps.check.outputs.publish == 'true'
+        if: steps.check.outputs.register == 'true'
         run: mcp-publisher login dns --domain toolstop.dev --private-key "$MCP_PRIVATE_KEY"
         env:
           MCP_PRIVATE_KEY: ${{ secrets.MCP_PRIVATE_KEY }}
 
+      # The registry validates the npm version before accepting the listing, and
+      # npm's read replicas lag a fresh publish by up to a minute or so; the
+      # first 0.4.1 attempt was refused with a 404 on a version that npm had
+      # accepted seconds earlier. Retry through that window.
       - name: Publish to the MCP registry
-        if: steps.check.outputs.publish == 'true'
+        if: steps.check.outputs.register == 'true'
         working-directory: packages/${{ matrix.package }}
-        run: mcp-publisher publish
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            mcp-publisher publish && exit 0
+            echo "attempt $attempt failed, waiting for npm to catch up"
+            sleep 30
+          done
+          exit 1
