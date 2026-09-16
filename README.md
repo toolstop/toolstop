@@ -6,6 +6,11 @@ assistant can call it instead of guessing.
 Every server runs on Cloudflare Workers at `<name>.toolstop.dev`, holds no
 state, and can also run locally over stdio.
 
+> **Not maintained since September 2026.** The servers stay up, but the data
+> embedded in export-control is frozen at its 2026-08-27 edition and every
+> answer names the edition it came from. Treat a licensing verdict as a
+> starting point, not a ruling.
+
 ## Servers
 
 | Server | Does | Endpoint |
