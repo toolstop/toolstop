@@ -14,9 +14,10 @@ name: Refresh embedded data
 # change to a product whose whole value is being right, and it gets read by a
 # human before it ships.
 
+# Archived 2026-09-16. The schedule is off because nobody is reading the PRs
+# it would open: the portfolio is kept live but not maintained. Run it by hand
+# from the Actions tab if a server is ever revived; everything below still works.
 on:
-  schedule:
-    - cron: '0 9 * * 1'
   workflow_dispatch:
 
 # The PR is created with GITHUB_TOKEN, and GitHub deliberately does not run

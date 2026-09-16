@@ -3,6 +3,13 @@
 A set of small, stateless MCP servers on Cloudflare Workers, served at
 `<name>.toolstop.dev`. This file is the operating manual.
 
+**Archived 2026-09-16.** The servers stay deployed and listed, because that
+costs nothing, but nothing here is maintained: the weekly data refresh is off,
+and export-control's embedded tables are the 2026-08-27 edition and will drift.
+Seven weeks of listing produced zero organic tool calls; the private strategy
+repo records why. Reviving a server means turning the `schedule` trigger in
+`refresh-data.yml` back on and merging whatever it opens.
+
 ## Adding a server
 
 ```
