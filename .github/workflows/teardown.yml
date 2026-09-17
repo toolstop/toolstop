@@ -51,9 +51,8 @@ jobs:
         run: |
           NAME="$(node -p 'require("./server.json").name')"
           ENC="$(node -p 'encodeURIComponent(require("./server.json").name)')"
-          # login writes .mcp_publisher_token into its cwd, the repo root.
-          F="$(ls "$GITHUB_WORKSPACE/.mcp_publisher_token" ~/.mcp_publisher_token 2>/dev/null | head -1)"
-          TOKEN="$(jq -r 'if type=="object" then (.token // .access_token) else . end' "$F" 2>/dev/null || cat "$F")"
+          # Per docs/reference/cli/commands.md in the registry repo.
+          TOKEN="$(jq -r .token ~/.config/mcp-publisher/token.json)"
           curl -fsS -X PATCH \
             -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
             -d '{"status":"deleted","statusMessage":"Discontinued 2026-09-16. Source remains at https://github.com/toolstop/toolstop."}' \
