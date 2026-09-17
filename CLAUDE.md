@@ -3,13 +3,13 @@
 A set of small, stateless MCP servers on Cloudflare Workers, served at
 `<name>.toolstop.dev`. This file is the operating manual.
 
-**Archived 2026-09-16.** The servers stay deployed and listed, because that
-costs nothing, but nothing here is maintained: the weekly data refresh is off,
-and export-control's embedded tables are the 2026-08-27 edition and will drift.
-Seven weeks of listing produced zero organic tool calls; the private strategy
-repo records why. Reviving a server means turning the `schedule` trigger in
-`refresh-data.yml` back on and merging whatever it opens.
-
+**Discontinued 2026-09-16.** Nothing here runs any more: the three Workers and
+their hostnames are deleted, every MCP registry version is marked `deleted`,
+and every `@toolstop/*` npm version is deprecated. Seven weeks of listing
+produced zero organic tool calls; the private strategy repo records why. The
+code is kept as-is and the `teardown.yml` workflow is the record of the
+removal. The `dev.toolstop` registry namespace stays verified as long as the
+domain is held.
 ## Adding a server
 
 ```
