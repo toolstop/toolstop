@@ -1,0 +1,74 @@
+name: Teardown
+
+# One-shot, run by hand on 2026-09-16 when the portfolio was taken down. Stage 1
+# of the experiment answered no (see the private strategy repo), and an archived
+# server that keeps serving is a live thing nobody maintains. Kept in the tree
+# as the record of what was removed and in what order.
+#
+# Order matters: the listings are marked deleted and the npm packages deprecated
+# BEFORE the Workers go, so no directory ever advertises a dead endpoint under
+# toolstop.dev. The secrets this uses are deleted from the repo afterwards.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type TEARDOWN to remove every server from the registry, npm and Cloudflare'
+        required: true
+
+jobs:
+  teardown:
+    if: inputs.confirm == 'TEARDOWN'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        package: [mcp-check-digits, mcp-export-control, mcp-prop65]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+          sudo mv mcp-publisher /usr/local/bin/
+
+      - name: Authenticate to the MCP registry
+        run: mcp-publisher login dns --domain toolstop.dev --private-key "$MCP_PRIVATE_KEY"
+        env:
+          MCP_PRIVATE_KEY: ${{ secrets.MCP_PRIVATE_KEY }}
+
+      - name: Mark every registry version deleted
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          NAME="$(node -p 'require("./server.json").name')"
+          mcp-publisher status --status deleted --all-versions \
+            --message "Discontinued 2026-09-16. Source remains at https://github.com/toolstop/toolstop." \
+            "$NAME"
+
+      - name: Deprecate the npm package
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          NAME="$(node -p 'require("./package.json").name')"
+          npm deprecate "$NAME@*" "Discontinued 2026-09-16; the hosted endpoint is gone. Source remains at https://github.com/toolstop/toolstop."
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Delete the Worker and its custom domain
+        working-directory: packages/${{ matrix.package }}
+        run: npx --yes wrangler@4 delete --force
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # The token id, so it can be found and revoked in the dashboard afterwards.
+      - name: Name the Cloudflare token used
+        run: |
+          curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify | jq -c '.result | {id, status}'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
