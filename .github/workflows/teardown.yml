@@ -43,13 +43,20 @@ jobs:
         env:
           MCP_PRIVATE_KEY: ${{ secrets.MCP_PRIVATE_KEY }}
 
+      # Not `mcp-publisher status`: 1.8.1 dies with "failed to read response:
+      # EOF" against the live registry and changes nothing. The PATCH it was
+      # meant to send works when sent by hand with the JWT `login` saved.
       - name: Mark every registry version deleted
         working-directory: packages/${{ matrix.package }}
         run: |
           NAME="$(node -p 'require("./server.json").name')"
-          mcp-publisher status --status deleted --all-versions \
-            --message "Discontinued 2026-09-16. Source remains at https://github.com/toolstop/toolstop." \
-            "$NAME"
+          ENC="$(node -p 'encodeURIComponent(require("./server.json").name)')"
+          TOKEN="$(jq -r '.token // .access_token // .' ~/.mcp_publisher_token 2>/dev/null || cat ~/.mcp_publisher_token)"
+          curl -fsS -X PATCH \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d '{"status":"deleted","statusMessage":"Discontinued 2026-09-16. Source remains at https://github.com/toolstop/toolstop."}' \
+            "https://registry.modelcontextprotocol.io/v0/servers/$ENC/status" \
+            | jq -r '.servers[] | "\(.server.version) \(._meta["io.modelcontextprotocol.registry/official"].status)"'
 
       - name: Deprecate the npm package
         working-directory: packages/${{ matrix.package }}
